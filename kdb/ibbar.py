@@ -2,10 +2,12 @@ import l1
 import os
 import datetime
 
-ven_sym_map={'NYM':['CL','NG','HO','RB','GC','SI','HG'],'CME':['ES','6A','6C','6E','6B','6J','6N','6R','6Z','6M'],'CBT':['ZB','ZN','ZF','ZC'],'EUX':['FDX','STXE','FGBX','FGBL','FGBS','FGBM']}
+ven_sym_map={'NYM':['CL','NG','HO','RB','GC','SI','HG'],'CME':['ES','6A','6C','6E','6B','6J','6N','6R','6Z','6M'],'CBT':['ZB','ZN','ZF','ZC'],'EUX':['FDX','STXE','FGBX','FGBL','FGBS','FGBM'],'FX':['AUD.CAD','AUD.JPY','AUD.NZD','CAD.JPY','EUR.AUD','EUR.CAD','EUR.CHF','EUR.GBP','EUR.JPY','EUR.NOK','EUR.SEK','EUR.TRY','EUR.ZAR','GBP,CHF','GBP.JPY','NOK.SEK','NZD.JPY','EUR.USD','USD.ZAR','USD.TRY','USD.MXN','USD.CNH','XAU.USD','XAG.USD']}
 sym_priority_list=['CL','ES','6E','6J','NG','ZN','GC','ZC','FDX','STXE','6A','6C','6B','6N','ZB','ZF','6R','6Z','6M','HO','RB','SI','HG','FGBX','FGBL','FGBS','FGBM']
-barsec_dur={1:1800, 2:3600, 10:14400, 30:28800, 60:60*60*24,300:60*60*24}
+barsec_dur={1:1800, 5:3600, 10:14400, 30:28800, 60:60*60*24,300:60*60*24}
 ib_sym_special=['6A','6C','6E','6B','6J','6N','6R','6Z','6M','ZC']
+future_venues=['NYM','CME','CBT','EUX']
+
 def ibvenue(symbol) :
     for k,v in ven_sym_map.items() :
         if symbol in v :
@@ -15,8 +17,15 @@ def ibvenue(symbol) :
 def ibfn(symbol,barsec,sday,eday) :
     return symbol+'_'+sday+'_'+eday+'_'+str(barsec)+'S'
 
+def l1fc(sym,day) :
+    if ibvenue(sym) in future_venues :
+        fc=l1.FC(sym,day)
+    else :
+        fc = sym
+    return fc
+
 def ibfc(sym,day) :
-    fc=l1.FC(sym,day)
+    fc = l1fc(sym,day)
     if sym in ib_sym_special :
         fc=sym+fc[-2:]
     return ibvenue(sym)+'/'+fc
@@ -56,22 +65,25 @@ def update_ib_config(symlistL1=sym_priority_list,symlistL2=[],day=None, cfg_file
             f.writelines(txt)
     return symL1, symL2
 
-def get_ib_future(symbol_list, start_date, end_date, barsec, ibclient='bin/histclient.exe', clp='IB',mock_run=False) :
+def get_ib_future(symbol_list, start_date, end_date, barsec, ibclient='bin/histclient.exe', clp='IB',mock_run=False, bar_path='hist') :
     cid = 100
     step_sec=barsec_dur[barsec]
     for symbol in symbol_list :
-        bar_dir = symbol
+        venue=ibvenue(symbol)
+        if venue == 'FX' :
+            bar_dir = bar_path+'/FX'
+        else :
+            bar_dir = bar_path+'/'+symbol
         os.system(' mkdir -p ' + bar_dir)
         ti = l1.TradingDayIterator(start_date)
         day=ti.yyyymmdd()
-        venue=ibvenue(symbol)
         while day <= end_date :
-            fc=l1.FC(symbol, day)
+            fc=l1fc(symbol, day)
             sday=day
             while day <= end_date :
                 ti.next()
                 day=ti.yyyymmdd()
-                fc0=l1.FC(symbol, day)
+                fc0=l1fc(symbol, day)
                 if fc != fc0 :
                     break
             eday=day

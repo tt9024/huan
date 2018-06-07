@@ -96,12 +96,12 @@ RollDates = {'CL':  [MonthlyFrontContract,   [17, 17, 17, 17, 17, 17, 17, 17, 17
              'HO':  [MonthlyFrontContract,   [26, 24, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26]], \
              'RB':  [MonthlyFrontContract,   [26, 24, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26]], \
              'ES':  [QuartlyFrontContract,   [31, 31, 12, 31, 31, 12, 31, 31, 12, 31, 31, 12]], \
-             'ZB':  [QuartlyFrontContract,   [31, 31, 17, 31, 31, 17, 31, 31, 17, 31, 31, 17]], \
-             'ZN':  [QuartlyFrontContract,   [31, 31, 17, 31, 31, 17, 31, 31, 17, 31, 31, 17]], \
-             'ZF':  [QuartlyFrontContract,   [31, 31, 27, 31, 31, 27, 31, 31, 27, 31, 31, 27]], \
-             'US':  [QuartlyFrontContract,   [31, 31, 17, 31, 31, 17, 31, 31, 17, 31, 31, 17]], \
-             'TY':  [QuartlyFrontContract,   [31, 31, 17, 31, 31, 17, 31, 31, 17, 31, 31, 17]], \
-             'FV':  [QuartlyFrontContract,   [31, 31, 27, 31, 31, 27, 31, 31, 27, 31, 31, 27]], \
+             'ZB':  [QuartlyFrontContract,   [31, 31,  1, 31, 31,  1, 31, 31,  1, 31, 31,  1]], \
+             'ZN':  [QuartlyFrontContract,   [31, 31,  1, 31, 31,  1, 31, 31,  1, 31, 31,  1]], \
+             'ZF':  [QuartlyFrontContract,   [31, 31,  1, 31, 31,  1, 31, 31,  1, 31, 31,  1]], \
+             'US':  [QuartlyFrontContract,   [31, 31,  1, 31, 31,  1, 31, 31,  1, 31, 31,  1]], \
+             'TY':  [QuartlyFrontContract,   [31, 31,  1, 31, 31,  1, 31, 31,  1, 31, 31,  1]], \
+             'FV':  [QuartlyFrontContract,   [31, 31,  1, 31, 31,  1, 31, 31,  1, 31, 31,  1]], \
              'FDX': [QuartlyFrontContract,   [31, 31, 17, 31, 31, 17, 31, 31, 17, 31, 31, 17]], \
              'STXE':[QuartlyFrontContract,   [31, 31, 17, 31, 31, 17, 31, 31, 17, 31, 31, 17]], \
              'FGBL':[QuartlyFrontContract,   [31, 31,  7, 31, 31,  7, 31, 31,  7, 31, 31,  7]], \
