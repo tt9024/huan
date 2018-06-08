@@ -492,7 +492,7 @@ def write_daily_bar(bar,bar_sec=5) :
         bar0=bar[i:j,:]  # take the bars in between the first occurance of 18:00:00 (or after) and the last occurance of 17:00:00 or before
 
         N = (utc_e-utc_s)/bar_sec  # but we still fill in each bar
-        ix_utc=((bar0[:,0]-float(utc_s))/5.0 + 0.5).astype(int)
+        ix_utc=((bar0[:,0]-float(utc_s))/bar_sec + 0.5).astype(int)
         bar_utc=np.arange(utc_s+bar_sec, utc_e+bar_sec, bar_sec) # bar time will be time of close price, as if in prod
 
         print 'getting bar ', day+'-18:00', day1+'-17:00', ' , got ', j-i, 'bars'
@@ -574,6 +574,62 @@ def write_daily_bar(bar,bar_sec=5) :
 
     return np.vstack(barr), trd_day_start, trd_day_end
 
+def bar_by_file_ib(fn,bid_ask_spd,bar_qt=None,bar_trd=None) :
+    """ 
+    _qt.csv and _trd.csv are expected to exist for the given fn
+    """
+    if bar_qt is None :
+        bar_qt=np.genfromtxt(fn+'_qt.csv',delimiter=',',usecols=[0,1,2,3,4]) #, dtype=[('utc','i8'),('open','<f8'),('high','<f8'),('low','<f8'),('close','<f8')])
+    if bar_trd is None :
+        bar_trd=np.genfromtxt(fn+'_trd.csv',delimiter=',',usecols=[0,1,2,3,4,5,6,7]) #,dtype=[('utc','i8'),('open','<f8'),('high','<f8'),('low','<f8'),('close','<f8'),('vol','i8'),('cnt','i8'),('wap','<f8')])
+
+    # use quote as ref
+    qts=bar_qt[:,0]
+    tts=bar_trd[:,0]
+    assert len(qts) > 3 and len(tts) > 3, 'too few bars found at ' + fn
+    # assert ts increasing
+    assert len(np.nonzero(qts[1:]-qts[:-1]<0)[0]) == 0, 'quote time stamp goes back'
+    assert len(np.nonzero(tts[1:]-tts[:-1]<0)[0]) == 0, 'trade time stamp goes back'
+
+    tix=np.searchsorted(tts,qts)
+    # they should be the same, otherwise, patch the different ones
+    ix0=np.nonzero(tts[tix]-qts!=0)[0]
+    if len(ix0) != 0 : 
+        print len(ix0), ' bars mismatch!'
+    ts=bar_trd[tix,:]
+    ts[tix[ix0],5]=0
+    ts[tix[ix0],6]=0
+    ts[tix[ix0],7]=bar_qt[ix0,4].copy()
+
+    vwap=ts[:,7].copy()
+    vol=ts[:,5].copy()
+    vb=vol.copy()
+    vs=vol.copy()
+    utc_ltt=ts[:,0]
+    if len(ix0) > 0 : 
+        utc_ltt[ix0]=np.nan
+        df=pd.DataFrame(utc_ltt)
+        df.fillna(method='ffill',inplace=True)
+
+    """ 
+    # for those bar without price movements, calculate the volume by avg trade price 
+    ixe=np.nonzero(bar_qt[:,1]-bar_qt[:,4]==0)[0]
+    #pdb.set_trace()
+    vb[ixe]=np.clip((ts[ixe,7]-(bar_qt[ixe,4]-bid_ask_spd/2))/bid_ask_spd*ts[ixe,5],0,1e+10)
+    vs[ixe]=ts[ixe,5]-vb[ixe]
+
+    ixg=np.nonzero(bar_qt[:,1]-bar_qt[:,4]<0)[0]
+    vs[ixg]=0
+    ixl=np.nonzero(bar_qt[:,1]-bar_qt[:,4]>0)[0]
+    vb[ixl]=0
+    """
+    spd=bid_ask_spd*np.clip(np.sqrt((bar_qt[:,2]-bar_qt[:,3])/bid_ask_spd),1,2)
+    mid=(bar_qt[:,2]+bar_qt[:,3])/2
+    vb=np.clip((vwap-(mid-spd/2))/spd,0,1)*vol
+    vs=vol-vb
+
+    bar=np.vstack((bar_qt[:,0],utc_ltt,bar_qt[:,1:5].T,vwap,vol,vb,vs)).T
+    return bar_qt, bar_trd, bar 
 
 def write_daily_bar0(bar,bar_sec=5) :
     """
