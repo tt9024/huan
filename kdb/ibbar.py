@@ -65,7 +65,7 @@ def update_ib_config(symlistL1=sym_priority_list,symlistL2=[],day=None, cfg_file
             f.writelines(txt)
     return symL1, symL2
 
-def get_ib_future(symbol_list, start_date, end_date, barsec, ibclient='bin/histclient.exe', clp='IB',mock_run=False, bar_path='hist') :
+def get_ib_future(symbol_list, start_date, end_date, barsec, ibclient='bin/histclient.exe', clp='IB',mock_run=False, bar_path='hist',getqt=True,gettrd=False) :
     cid = 100
     step_sec=barsec_dur[barsec]
     for symbol in symbol_list :
@@ -92,11 +92,22 @@ def get_ib_future(symbol_list, start_date, end_date, barsec, ibclient='bin/histc
                 fc = symbol+fc[-2:]
             sym=venue+'/'+fc
 
+            fext = []
+            cext = []
+            if getqt :
+                print 'getting quote'
+                fext.append('_qt.csv')
+                cext.append('0')
+            if gettrd :
+                print 'getting trade'
+                fext.append('_trd.csv')
+                cext.append('1')
             #for ext in ['_qt.csv','_trd.csv']:
-            for ext in ['_qt.csv'] :
+            for ext in fext :
                 fn0=fn+ext
-                os.system( 'rm -f ' + fn0 + ' > /dev/null 2>&1')
-                os.system( 'rm -f ' + fn0 + '.gz' + ' > /dev/null 2>&1')
+                if not mock_run:
+                    os.system( 'rm -f ' + fn0 + ' > /dev/null 2>&1')
+                    #os.system( 'rm -f ' + fn0 + '.gz' + ' > /dev/null 2>&1')
             
             # get all days with the same contract, saving to the same file
             tic=l1.TradingDayIterator(sday)
@@ -111,7 +122,7 @@ def get_ib_future(symbol_list, start_date, end_date, barsec, ibclient='bin/histc
                         utc0+=step_sec
                         eday_str=datetime.datetime.fromtimestamp(utc0).strftime('%Y%m%d %H:%M:%S')
                         #for ist, ext in zip (['0', '1'], ['_qt.csv','_trd.csv']):
-                        for ist, ext in zip (['0'], ['_qt.csv']):
+                        for ist, ext in zip (cext, fext) :
                             fn0=fn+ext
                             cmdline=ibclient + ' ' + str(cid) + ' ' + sym + ' ' + '\"'+eday_str+'\"' + ' ' + str(barsec) + ' ' + fn0 + ' ' + ist + ' ' + clp
                             print 'running ', cmdline

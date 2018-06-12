@@ -21,6 +21,9 @@ import pdb
 ### bottom line: the features make sense. Can also 
 ### improve by looking into 2 minutes of lr and vbs
 
+xlr_cnt=9  # xvbs starts
+has_vbs =True 
+
 def Xlr(wb5m) : 
     #fd2=np.sum(wb5m[:,8*12+4:9*12+7,1],axis=1)
     #fd3=np.sum(wb5m[:,11*12+2:11*12+8,1],axis=1)
@@ -41,26 +44,28 @@ def Xlr(wb5m) :
     fd10=np.sum(wb5m[:,(2*23+22)*12+3:(2*23+22)*12+11,1],axis=1)
     fd12=np.sum(wb5m[:,(2*23+18)*12+3:(2*23+19)*12+3,1],axis=1)
 
-    fd11=np.sum(wb5m[:,(3*23+10)*12+9:(3*23+12)*12+2,1],axis=1)
+    fd11=np.sum(wb5m[:,(3*23+10)*12+9:(3*23+12)*12+2,1],axis=1) # thursday 5m lr observed from 4:50am (4:45 to 4:50) to 6:15am
     fd13=np.sum(wb5m[:,(3*23+17)*12+3:(3*23+18)*12,1],axis=1) # this feature is not import
 
-    fd14=np.sum(wb5m[:,(4*23+0)*12-1:(4*23+0)*12+6,1],axis=1)  # has an overnight lr, note for roll
+    fd14=np.sum(wb5m[:,(4*23+0)*12-1:(4*23+0)*12+6,1],axis=1)  # has an overnight lr, note for roll, Thurday 5m lr at 5pm to 6:35pm 
     fd15=np.sum(wb5m[:,-60-42:-60,1],axis=1) 
 
     ### whole days? 
     fd16=np.sum(wb5m[:,23*12*3+11:23*12*4,1],axis=1)
     fd17=np.sum(wb5m[:,23*12*1:23*12*3,1],axis=1)  # this is too volatile!
     X=np.vstack((fd0,fd1,fd2,fd3,fd4,fd11,fd14,fd15,fd16)).T  # it seems that Monday,Thursday and Friday has the best
-    #X=np.vstack((fd0,fd1,fd2,fd3,fd4,fd11,fd14,np.sign(fd14)*fd14*fd14,fd15,fd16)).T
+    #X=np.vstack((fd0,fd1,fd2,fd3,fd4,np.sign(fd14)*np.abs(fd14*np.r_[0,fd14[:-1]]),fd11,fd14,fd15,fd16)).T
     #X=np.vstack((fd0,fd1,fd2,fd3,fd4,fd11,fd14,fd15,fd16,np.sign(fd14)*fd11*fd14)).T  # it seems that Monday,Thursday and Friday has the best
     #X=np.vstack((fd0,fd1,fd2,fd3,fd4,fd11,fd6,fd10,fd14,fd15,fd16)).T  # it seems that Monday,Thursday and Friday has the best
 
     #X=np.vstack((fd0,fd1,fd2,fd3,fd4,fd11,fd14,fd15)).T  # it seems that Monday,Thursday and Friday has the best
-
     return X.copy()
 
-def getYTrain(wb5m,y0=-60,y1=-30,wt_decay=0.1) :
-    y=np.sum(wb5m[:,y0:y1,1],axis=1)
+def getYTrain(wb5m,y0=-60,y1=-30,wt_decay=0.1,fd=None) :
+    if fd is not None:
+        y=fd.copy()
+    else :
+        y=np.sum(wb5m[:,y0:y1,1],axis=1)
     wt=l1_reader.getwt(len(y),wt_decay)
     wt/=np.sum(wt)
     mu=np.dot(y,wt)
@@ -68,8 +73,11 @@ def getYTrain(wb5m,y0=-60,y1=-30,wt_decay=0.1) :
     y0=ean.outlier(y,mu,sd,in_th=1,out_th=3)
     return y0, mu, sd
 
-def getYTest(wb5m,mu,sd,y0=-60,y1=-30) :
-    y=np.sum(wb5m[:,y0:y1,1],axis=1)
+def getYTest(wb5m,mu,sd,y0=-60,y1=-30,fd=None) :
+    if fd is not None:
+        y=fd.copy()
+    else :
+        y=np.sum(wb5m[:,y0:y1,1],axis=1)
     #y0=ean.outlier(y,mu,sd,in_th=1,out_th=3)
     y0=y.copy()
     return y0
@@ -115,7 +123,7 @@ def Xvbs(vbs) :
     fd2_=np.sum(np.sign(vbs[:,(23+5)*12+8:(23+7)*12+6]),axis=1)
 
     #wednesday
-    fd3=np.sum(vbs[:,(2*23+21)*12+5:(3*23+2)*12+6],axis=1)
+    fd3=np.sum(vbs[:,(2*23+21)*12+5:(3*23+2)*12+6],axis=1)  # Wednesday 15:30pm to 18:30pm (inclusive)
     fd3_=np.sum(np.sign(vbs[:,(2*23+21)*12+5:(3*23+2)*12+6]),axis=1)
 
     fd4=np.sum(vbs[:,(2*23)*12+8:(2*23+2)*12+3],axis=1)
@@ -152,18 +160,22 @@ def Xvbs(vbs) :
 
 def Xvol0(v0) :
     #fd0=np.sum(v0[:,-84:-68],axis=1)  # this is gone
-    fd1=np.sum(v0[:,(3*23+18)*12:(4*23+1)*12],axis=1)  #Thursday 12pm to Fri 7pm
+    fd1=np.sum(v0[:,(3*23+18)*12:(4*23+1)*12],axis=1)  #Thursday 12pm to Thursday 7pm
     #X=np.vstack((fd0,fd1)).T
     X=fd1  # this doesn't hold anymore
     return X
 
-def getXTrain(wb5m,y0=-60,y1=-30,wt_decay=0.1) :
+def getXTrain(wb5m,y0=-60,y1=-30,wt_decay=0.1,fd=None) :
     X1=Xlr(wb5m)
     X2=Xvbs(wb5m[:,:,3])
-    Y0,mu,sd=getYTrain(wb5m,y0=y0,y1=y1,wt_decay=wt_decay)
+    Y0,mu,sd=getYTrain(wb5m,y0=y0,y1=y1,wt_decay=wt_decay,fd=fd)
     X3=YprevTrain(Y0)
     X=np.vstack((X1.T,X2.T,X3.T)).T
+    #X=np.vstack((X1.T,X3.T)).T
     #X=np.vstack((X1.T,X2.T,X3.T,(X1[:,6]*X2[:,0]).T)).T
+
+    #X=X1.copy()
+    #X=X1.copy()
 
     mu=np.mean(X,axis=0)
     sd=np.std(X,axis=0)
@@ -171,17 +183,20 @@ def getXTrain(wb5m,y0=-60,y1=-30,wt_decay=0.1) :
     X-=mu ; X/=sd; X=np.vstack((np.ones(wb5m.shape[0]),X.T)).T
     return X,mu,sd
 
-def getXTest(wb5m,Ytrain,xmu,xsd,ymu,ysd,y0=-60,y1=-30) :
+def getXTest(wb5m,Ytrain,xmu,xsd,ymu,ysd,y0=-60,y1=-30,fd=None) :
     X1=Xlr(wb5m)
     X2=Xvbs(wb5m[:,:,3])
-    Y0=getYTest(wb5m,ymu,ysd,y0=y0,y1=y1)
+    Y0=getYTest(wb5m,ymu,ysd,y0=y0,y1=y1,fd=fd)
     X3=YprevTest(Y0,Ytrain)
     X=np.vstack((X1.T,X2.T,X3.T)).T
+    #X=np.vstack((X1.T,X3.T)).T
     #X=np.vstack((X1.T,X2.T,X3.T,(X1[:,6]*X2[:,0]).T)).T
+
+    #X=X1.copy()
     X-=xmu ; X/=xsd ; X=np.vstack((np.ones(wb5m.shape[0]),X.T)).T
     return X
 
-def getYh(Xtrain,Ytrain, Xtest, clf, wt_decay=None, feat_select=True, fit_sign=False) :
+def getYh(Xtrain,Ytrain, Xtest, clf, wt_decay=None, feat_select=True, fit_sign=False, wt_neg=False) :
     #omp=linear_model.Lars()
     #omp=linear_model.OrthogonalMatchingPursuitCV()
     #omp=linear_model.LassoCV()
@@ -192,6 +207,7 @@ def getYh(Xtrain,Ytrain, Xtest, clf, wt_decay=None, feat_select=True, fit_sign=F
     if feat_select :
         ix=feat_sel(Xtrain,Ytrain)
         if len(ix) == 0 :
+            print 'nothing got selected!'
             return np.ones(Xtest.shape[0])*Ytrain.mean(), omp, [0]
         ix=np.r_[0,ix]
     else :
@@ -211,21 +227,31 @@ def getYh(Xtrain,Ytrain, Xtest, clf, wt_decay=None, feat_select=True, fit_sign=F
     else :
         Ytrain0=Ytrain
 
+    if wt_neg :
+        ixn=np.nonzero(Ytrain0<0)[0]
+        if len(ixn) > 0 :
+            if wt is None :
+                wt=np.ones(len(Ytrain0))
+            wt[ixn] *= (1+np.sqrt(np.abs(Ytrain0[ixn])))
     omp.fit(Xtrain[:,ix], Ytrain0,sample_weight=wt)
     #ys=np.abs(Ytrain)
     #wty=np.sqrt(ys/ys.std()+1)
     #wty/=wty.std()
     #omp.fit(Xtrain[:,ix], Ytrain0,sample_weight=wt*wty)
 
-    yh=omp.predict(Xtest[:,ix])
+    if fit_sign :
+        yp = omp.predict_proba(Xtest[:,ix])
+        yh = yp[:,-1]-yp[:,0]
+    else :
+        yh=omp.predict(Xtest[:,ix])
     return yh,omp,ix.copy()
 
-def rollY(wb5m, train_idx, test_idx, clf, y0=-60, y1=-30, wt_decay=0.1,train_wt_decay=0.25,feat_select=True,fit_sign=False) :
-    X,xmu,xsd=getXTrain(wb5m[train_idx,:,:],y0=y0, y1=y1,wt_decay=wt_decay)
-    Y,ymu,ysd=getYTrain(wb5m[train_idx,:,:],y0=y0,y1=y1,wt_decay=wt_decay)
-    Xt=getXTest(wb5m[test_idx,:,:],Y,xmu,xsd,ymu,ysd,y0=y0,y1=y1)
-    Yt=getYTest(wb5m[test_idx,:,:],ymu,ysd,y0=y0,y1=y1)
-    yh,omp,coefix=getYh(X, Y, Xt, clf,wt_decay=train_wt_decay,feat_select=feat_select,fit_sign=fit_sign)
+def rollY(wb5m, train_idx, test_idx, clf, y0=-60, y1=-30, wt_decay=0.1,train_wt_decay=0.25,feat_select=True,fit_sign=False,wt_neg=False,fd=None) :
+    X,xmu,xsd=getXTrain(wb5m[train_idx,:,:],y0=y0, y1=y1,wt_decay=wt_decay,fd=fd)
+    Y,ymu,ysd=getYTrain(wb5m[train_idx,:,:],y0=y0,y1=y1,wt_decay=wt_decay,fd=fd)
+    Xt=getXTest(wb5m[test_idx,:,:],Y,xmu,xsd,ymu,ysd,y0=y0,y1=y1,fd=fd)
+    Yt=getYTest(wb5m[test_idx,:,:],ymu,ysd,y0=y0,y1=y1,fd=fd)
+    yh,omp,coefix=getYh(X, Y, Xt, clf,wt_decay=train_wt_decay,feat_select=feat_select,fit_sign=fit_sign,wt_neg=wt_neg)
     #print np.corrcoef(yh, Yt)[0,1]
     return X,Y,Xt,Yt,yh,omp,coefix
 
@@ -304,12 +330,12 @@ def feat_sel0(X,y,lt_cor_th=0.001,st_smp_cnt=16,wt_decay=0.25) :
     print len(ix0),
     return ix[ix0]
 
-def feat_sel(X,y,lt_cor_th=0.0001,st_smp_cnt=16,wt_decay=0.25,vbose=False):
+def feat_sel(X,y,lt_cor_th=0.0001,st_smp_cnt=16,wt_decay=0.25,vbose=True):
         #ix1=feat_sel2(X,y,lt_cor_th=lt_cor_th,st_smp_cnt=st_smp_cnt,wt_decay=wt_decay,vbose=vbose)
 
         ##ix2=feat_sel1(X,y,lt_cor_th=lt_cor_th,st_smp_cnt=st_smp_cnt*4,wt_decay=wt_decay)
         #ix1=feat_sel3(X,y,st_smp_cnt=st_smp_cnt,wt_decay=wt_decay)
-        ix1=feat_sel4(X,y,st_smp_cnt=st_smp_cnt,vbose=False)
+        ix1=feat_sel4(X,y,st_smp_cnt=st_smp_cnt,vbose=vbose)
         
         #print ix1
         return ix1
@@ -602,7 +628,13 @@ def feat_sel3(X,y,st_smp_cnt=16,lt_smp_cnt=200,wt_decay=0.25,wt_train=0.5,clf=No
 # select a feature with the lowest weighted corr with wt = 0.1
 # (or you could remove all features that didn't help)
 # iterate 
-def feat_sel4(X,y,lb=20,st_smp_cnt=16,st_th=8e-3,lt_th=4e-2,wt_train=0.5,clf=None,vbose=False,xlr_cnt=9,ix_check=[10,12,13,14]) :
+
+def feat_sel4(X,y,lb=20,st_smp_cnt=16,st_th=8e-3,lt_th=4e-2,wt_train=0.5,clf=None,vbose=True,ix_check0=[0,2,3,4]) :
+    if has_vbs :
+        ix_check=xlr_cnt+1+np.array(ix_check0)
+    else :
+        ix_check=xlr_cnt+1+np.array(ix_check0[2:])
+
     n,m=X.shape
     assert n > st_smp_cnt, 'len error'
     assert len(y) == n, 'X,y shape error'
@@ -623,13 +655,14 @@ def feat_sel4(X,y,lb=20,st_smp_cnt=16,st_th=8e-3,lt_th=4e-2,wt_train=0.5,clf=Non
     if len(ix0) > 0 :
         ixi=np.r_[ixi[ix0],np.delete(ixi,ix0)]
 
-    # a very special rule 
-    if 10 in ixi and 8 in ixi and 11 in ixi :
-        # remove 10
-        ix10=np.nonzero(ixi==10)[0]
-        ixi=np.delete(ixi,ix10)
-        if vbose :
-            print ' removed 10'
+    if has_vbs :
+        # a very special rule 
+        if xlr_cnt+1 in ixi and xlr_cnt-1 in ixi and xlr_cnt+2 in ixi :
+            # remove 10
+            ix10=np.nonzero(ixi==xlr_cnt+1)[0]
+            ixi=np.delete(ixi,ix10)
+            if vbose :
+                print ' removed ',xlr_cnt+1
     if vbose :
         print 'got corr ', cor, 'rearrange ixi ', ixi
 
@@ -716,6 +749,8 @@ def eval_roll0(wb5m, hist, roll, train_wt_decay, clf, feat_select, train_ix0=400
         c0=np.zeros(max_coef)
         if not fit_sign :
             c0[coefix]=omp.coef_
+            c0[-1]=omp.intercept_
+
         coef.append(c0.copy())
         yh=np.r_[yh,yh0]
         yt=np.r_[yt,Y1]
@@ -764,9 +799,10 @@ def eval_roll0(wb5m, hist, roll, train_wt_decay, clf, feat_select, train_ix0=400
 #grid search confirmed the result
 ####
 def eval_roll(wb5m, hist=600, roll=40, train_wt_decay=0.5, clf=None, feat_select=True, train_ix0=600, ax_arr=None, fit_sign=False,if_plot=False) :
-    coef, yt, yh, dt, cor3, ax=eval_roll0(wb5m,hist,roll,train_wt_decay,clf,feat_select,train_ix0=train_ix0,ax_arr=None,fit_sign=fit_sign,if_plot=False)
+    coef, yt, yh, dt, cor3, ax=     eval_roll0(wb5m,hist,roll,  train_wt_decay,clf,feat_select,train_ix0=train_ix0,ax_arr=None,fit_sign=fit_sign,if_plot=False)
     coef2, yt2, yh2, dt2, cor32, ax=eval_roll0(wb5m,hist,roll/2,train_wt_decay,clf,feat_select,train_ix0=train_ix0,ax_arr=None,fit_sign=fit_sign,if_plot=False)
-    return yt,yh*0.75 + yh2*0.25
+    #return yt,yh*0.75 + yh2*0.25
+    return yt,yh,yh2
 
 def grid_search_roll(wb5m, hist=600, roll=40, train_wt_decay=0.5, clf=None, feat_select=True, train_ix0=600, ax_arr=None, fit_sign=False,if_plot=False) :
     coef, yt, yh, dt, cor3, ax=eval_roll0(wb5m,600,40,train_wt_decay,clf,feat_select,train_ix0=600,ax_arr=None,fit_sign=fit_sign,if_plot=False)
