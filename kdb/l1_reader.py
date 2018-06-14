@@ -100,7 +100,7 @@ class DailyBar :
         if ti.yyyymmdd() != day :
             raise ValueError(day + ' not a trading day')
         # starting being 18:00:05
-        utc0=float(ti.dt.strftime('%s'))
+        utc0=float(l1.TradingDayIterator.local_dt_to_utc(ti.dt))
         utc_st=utc0-6*3600+self.bs
         utc_ed=utc0+17*3600
         i=np.searchsorted(self.utc0[1:], utc_st+1)
@@ -121,7 +121,7 @@ class DailyBar :
         SecPerDay=23*3600
         N=SecPerDay/bar_sec
         if c == utcc :
-            u0=int(datetime.datetime.strptime(day,'%Y%m%d').strftime('%s'))-6*3600
+            u0=int(l1.TradingDayIterator.local_ymd_to_utc(day))-6*3600
             utc0=u0+bar_sec
             utc1=u0+N*bar_sec
             return np.arange(utc0,utc1+1,bar_sec)
@@ -452,7 +452,7 @@ def plot_dist_weekly_by_utc(wbdict, weekday, hhmmss, param_str='', if_plot_dist=
         dc+=1
     assert ti.dt.weekday() == weekday, 'weekday ' + str(weekday) + ' not found!'
     dtstr=ti.yyyymmdd()+hhmmss
-    utc1=int(datetime.datetime.strptime(dtstr,'%Y%m%d%H%M%S').strftime('%s'))
+    utc1=int(l1.TradingDayIterator.local_dt_to_utc(datetime.datetime.strptime(dtstr,'%Y%m%d%H%M%S')))
     ix=np.searchsorted(wbdict['wbar'][0,:,0].astype(int),utc1)
     utc2=wbdict['wbar'][0,ix,0]
     dt2=datetime.datetime.fromtimestamp(utc2)

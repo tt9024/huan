@@ -69,6 +69,10 @@ class TradingDayIterator :
         return utc0
 
     @staticmethod
+    def local_dt_to_utc(dt) :
+        return TradingDayIterator.local_ymd_to_utc(dt.strftime('%Y%m%d'),dt.hour,dt.minute,dt.second)
+
+    @staticmethod
     def utc_to_local_ymd(utc) :
         return datetime.datetime.fromtimestamp(utc).strftime('%Y%m%d')
 
@@ -208,7 +212,8 @@ def f0(fn, sym, bar_sec, line_start=1, line_end=1000000) :
                         # found one work on bar time/price 
                         # don't stuff in idle times
                         tm=l[3].split('.')
-                        utc=int(datetime.datetime.strptime(day+tm[0],'%Y%m%d%H:%M:%S').strftime('%s'))
+                        hms = tm[0].split(':')
+                        utc=TradingDayIterator.local_ymd_to_utc(day, int(hms[0]), int(hms[1]), int(hms[2]))
                         utc_frac=float(utc)+float('.'+tm[1])
                         # setting up if it's a new contract :
                         if not cur_pt.has_key(ct) :
@@ -295,7 +300,8 @@ def parse_raw_fx_quote(b) :
     ap=[]
     mmid=[]
     for l in b :
-        d0=datetime.datetime.strptime(l[0]+l[2].split('.')[0],'%Y.%m.%d%H:%M:%S').strftime('%s')
+        hms=l[2].split('.')[0].split(':')
+        d0=TradingDayIterator.lcoal_ymd_to_utc(l[0], int(hms[0]), int(hms[1]),int(hms[2]))
         d0=d0+'.'+l[2].split('.')[-1]
         dt.append(d0)
         bp.append(l[3])
@@ -430,9 +436,10 @@ def bar_by_file(fn, skip_header=5) :
     bar=[]
     for b in bar_raw :
         dt=datetime.datetime.strptime(b['day']+'.'+b['bar_start'].split('.')[0],'%Y.%m.%d.%H:%M:%S')
-        utc=float(dt.strftime('%s'))
+        utc=float(TradingDayIterator.local_dt_to_utc(dt))
         dt_lt=datetime.datetime.strptime(b['day']+'.'+b['last_trade'].split('.')[0],'%Y.%m.%d.%H:%M:%S')
-        utc_lt=float(dt.strftime('%s'))+float(b['last_trade'].split('.')[1])/1000.0
+        utc_lt=float(TradingDayIterator.local_dt_to_utc(dt))+float(b['last_trade'].split('.')[1])/1000.0
+
         bar0=[utc, utc_lt, b['open'],b['high'],b['low'],b['close'],b['vwap'],b['volume'],b['bvol'],b['svol']]
         bar.append(bar0)
     bar = np.array(bar)
@@ -459,7 +466,7 @@ def write_daily_bar(bar,bar_sec=5) :
 
     # get the initial day, last price
     day_start=dt.strftime('%Y%m%d')
-    utc_s = int(datetime.datetime.strptime(day_start+'.18:00:00', '%Y%m%d.%H:%M:%S').strftime('%s'))
+    utc_s = int(TradingDayIterator.local_ymd_to_utc(day_start, 18, 0, 0))
     x=np.searchsorted(bar[1:,0], float(utc_s-3600+bar_sec))
     last_close_px=bar[x,2]
     print 'last close price set to previous close at ', datetime.datetime.fromtimestamp(bar[x,0]), ' px: ', last_close_px
@@ -479,10 +486,10 @@ def write_daily_bar(bar,bar_sec=5) :
     barr=[]
     TRADING_HOURS=23
     while day < day_end:
-        #utc_s = int(datetime.datetime.strptime(day+'.18:00:00', '%Y%m%d.%H:%M:%S').strftime('%s'))
         ti.next()
         day1=ti.yyyymmdd()
-        utc_e = int(datetime.datetime.strptime(day1+'.17:00:00','%Y%m%d.%H:%M:%S').strftime('%s'))
+        utc_e = int(TradingDayIterator.local_ymd_to_utc(day1, 17,0,0))
+
         # get start backwards for starting on a Sunday
         utc_s = utc_e - TRADING_HOURS*3600
         day=datetime.datetime.fromtimestamp(utc_s).strftime('%Y%m%d')
@@ -492,7 +499,7 @@ def write_daily_bar(bar,bar_sec=5) :
         bar0=bar[i:j,:]  # take the bars in between the first occurance of 18:00:00 (or after) and the last occurance of 17:00:00 or before
 
         N = (utc_e-utc_s)/bar_sec  # but we still fill in each bar
-        ix_utc=((bar0[:,0]-float(utc_s))/bar_sec + 0.5).astype(int)
+        ix_utc=((bar0[:,0]-float(utc_s))/bar_sec+1e-9).astype(int)
         bar_utc=np.arange(utc_s+bar_sec, utc_e+bar_sec, bar_sec) # bar time will be time of close price, as if in prod
 
         print 'getting bar ', day+'-18:00', day1+'-17:00', ' , got ', j-i, 'bars'
@@ -578,16 +585,33 @@ def bar_by_file_ib(fn,bid_ask_spd,bar_qt=None,bar_trd=None) :
     """ 
     _qt.csv and _trd.csv are expected to exist for the given fn
     """
+    import pandas as pd
     if bar_qt is None :
         bar_qt=np.genfromtxt(fn+'_qt.csv',delimiter=',',usecols=[0,1,2,3,4]) #, dtype=[('utc','i8'),('open','<f8'),('high','<f8'),('low','<f8'),('close','<f8')])
     if bar_trd is None :
         bar_trd=np.genfromtxt(fn+'_trd.csv',delimiter=',',usecols=[0,1,2,3,4,5,6,7]) #,dtype=[('utc','i8'),('open','<f8'),('high','<f8'),('low','<f8'),('close','<f8'),('vol','i8'),('cnt','i8'),('wap','<f8')])
 
     # use quote as ref
-    qts=bar_qt[:,0]
-    tts=bar_trd[:,0]
+    ix0 = min(bar_qt.shape[0], bar_trd.shape[0])
+    qts=bar_qt[:ix0,0]
+    tts=bar_trd[:ix0,0]
     assert len(qts) > 3 and len(tts) > 3, 'too few bars found at ' + fn
-    # assert ts increasing
+
+    # take only the part where time is monotonically increasing
+    ix = np.nonzero(qts[1:]-qts[:-1]<=0)[0]
+    if len(ix) > 0 :
+        print 'truncate quote from ', ix0, ' to ', ix[0]
+        ix0 = ix[0]+1
+    ix = np.nonzero(tts[1:ix0]-tts[:ix0-1]<=0)[0]
+    if len(ix) > 0 :
+        ix0 = ix[0]+1
+        print 'truncate trade from ', ix0, ' to ', ix[0]
+
+    bar_qt = bar_qt[:ix0,:]
+    bar_trd = bar_trd[:ix0,:]
+    qts=bar_qt[:ix0,0]
+    tts=bar_trd[:ix0,0]
+
     assert len(np.nonzero(qts[1:]-qts[:-1]<0)[0]) == 0, 'quote time stamp goes back'
     assert len(np.nonzero(tts[1:]-tts[:-1]<0)[0]) == 0, 'trade time stamp goes back'
 
@@ -631,131 +655,6 @@ def bar_by_file_ib(fn,bid_ask_spd,bar_qt=None,bar_trd=None) :
     bar=np.vstack((bar_qt[:,0],utc_ltt,bar_qt[:,1:5].T,vwap,vol,vb,vs)).T
     return bar_qt, bar_trd, bar 
 
-def write_daily_bar0(bar,bar_sec=5) :
-    """
-    This gets every bar including week ends
-    """
-    import pandas as pd
-    dt0=datetime.datetime.fromtimestamp(bar[0,0])
-    #assert dt.hour < 18 , 'start of bar file hour > 18'
-    i=0
-    # seek to the first bar greater or equal to 18 on that day
-    dt=dt0
-    while dt.hour<18 :
-        i+=1
-        dt=datetime.datetime.fromtimestamp(bar[i,0])
-        if dt.day != dt0.day :
-            #raise ValueError('first day skipped, no bars between 18pm - 24am detected')
-            print 'first day skipped, no bars between 18pm - 24am detected'
-            break
-    # start writing 5 second bars on day dt 
-
-    #pdb.set_trace()
-    day_start=dt.strftime('%Y%m%d')
-    utc_s = int(datetime.datetime.strptime(day_start+'.18:00:00', '%Y%m%d.%H:%M:%S').strftime('%s'))
-    day_end=datetime.datetime.fromtimestamp(bar[-1,0]).strftime('%Y%m%d')
-    utc_e = int(datetime.datetime.strptime(day_end+'.17:00:00','%Y%m%d.%H:%M:%S').strftime('%s'))
-    j=np.searchsorted(bar[:, 0], float(utc_e)-1e-6)
-    bar0=bar[i:j,:]  # take the bars in between the first occurance of 18:00:00 (or after) and the last occurance of 17:00:00 or before
-    N = (utc_e-utc_s)/bar_sec  # but we still fill in each bar
-    ix_utc=((bar0[:,0]-float(utc_s))/5.0 + 0.5).astype(int)
-    bar_utc=np.arange(utc_s+bar_sec, utc_e+bar_sec, bar_sec) # bar time will be time of close price, as if in prod
-
-    # search for a starting last price:
-    # If day_start+'17:00:00' exists, then use that price
-    # otherwise, use the open price
-    #pdb.set_trace()
-    x=np.searchsorted(bar[1:,0], float(utc_s-3600+bar_sec))
-    if bar[x,0] > utc_s :
-        # use open px
-        last_close_px=bar0[0,2]
-        print 'last close price set to open price ', last_close_px
-    else :
-        last_close_px=bar[x,2]
-        print 'last close price set to previous close at ', datetime.datetime.fromtimestamp(bar[x,0]), ' px: ', last_close_px
-
-    print 'preparing bar from ', day_start, ' to ', day_end
-    # start to construct bar
-    bar_arr=[]
-    bar_arr.append(bar_utc.astype(float))
-
-    # construct the log returns for each bar, fill in zeros for gap
-    #lpx_open=np.log(bar0[:,2])
-    lpx_open=np.log(np.r_[last_close_px,bar0[:-1,5]])
-    lpx_hi=np.log(bar0[:,3])
-    lpx_lo=np.log(bar0[:,4])
-    lpx_close=np.log(bar0[:,5])
-    lpx_vwap=np.log(bar0[:,6])
-    lr=lpx_close-lpx_open
-    lr_hi=lpx_hi-lpx_open
-    lr_lo=lpx_lo-lpx_open
-    lr_vw=lpx_vwap-lpx_open
-
-    # remove bars having abnormal return, i.e. circuit break for ES
-    # with 9999 prices
-    MaxLR=0.2
-    ix1=np.nonzero(np.abs(lr)>=MaxLR)[0]
-    ix1=np.union1d(ix1,np.nonzero(np.abs(lr_hi)>=MaxLR)[0])
-    ix1=np.union1d(ix1,np.nonzero(np.abs(lr_lo)>=MaxLR)[0])
-    ix1=np.union1d(ix1,np.nonzero(np.abs(lr_vw)>=MaxLR)[0])
-    if len(ix1) > 0 :
-        print 'warning: removing ', len(ix1), 'ticks exceed MaxLR (lr/lo/hi/vw) ', zip(lr[ix1],lr_hi[ix1],lr_lo[ix1],lr_vw[ix1])
-        lr[ix1]=0
-        lr_hi[ix1]=0
-        lr_lo[ix1]=0
-        lr_vw[ix1]=0
-
-    # the trade volumes for each bar, fill in zeros for gap
-    vlm=bar0[:,7]
-    vb=bar0[:,8]
-    vs=np.abs(bar0[:,9])
-    vbs=vb-vs
-
-    for v0, vn in zip([lr,lr_hi,lr_lo,lr_vw,vlm,vbs], ['lr','lr_hi','lr_lo','lr_vw','vlm','vbs']) :
-        nix=np.nonzero(np.isnan(v0))[0]
-        nix=np.union1d(nix, np.nonzero(np.isinf(np.abs(v0)))[0])
-        if len(nix) > 0 :
-            print 'warning: removing ', len(nix), ' nan/inf ticks for ', vn
-            v0[nix]=0
-        b0=np.zeros(N).astype(float)
-        b0[ix_utc]=v0
-        bar_arr.append(b0.copy())
- 
-    # get the last trade time, this is needs to be
-    ltt=np.empty(N)*np.nan
-    ltt[ix_utc]=bar0[:,1]
-    df=pd.DataFrame(ltt)
-    df.fillna(method='ffill',inplace=True)
-    if not np.isfinite(ltt[0]) :
-        ptt=0 #no previous trading detectable
-        if i > 0 : #make some effort here
-            ptt=bar[i-1,1]
-            if not np.isfinite(ptt) :
-                ptt=0
-        df.fillna(ptt,inplace=True)
-    bar_arr.append(ltt)
-
-    # get the last price, as a debugging tool
-    lpx=np.empty(N)*np.nan
-    lpx[ix_utc]=bar0[:,5]
-    df=pd.DataFrame(lpx)
-    df.fillna(method='ffill',inplace=True)
-    if not np.isfinite(lpx[0]) :
-        df.fillna(last_close_px,inplace=True)
-    bar_arr.append(lpx)
-
-    # deciding on the trading days
-    if dt.hour > 17 :
-        ti=TradingDayIterator(day_start,adj_start=False)
-        ti.next()
-        trd_day_start=ti.yyyymmdd()
-    else :
-        trd_day_start=day_start
-    trd_day_end=day_end
-    return np.array(bar_arr).T, trd_day_start, trd_day_end
-
-
-
 def get_contract_bar(symbol, contract, yyyy) :
     """
     date,ric,timeStart,lastTradeTickTime,open,high,low,close,avgPrice,vwap,volume,buyvol,sellvol
@@ -770,11 +669,13 @@ def get_contract_bar(symbol, contract, yyyy) :
     fn=f[0]
     return bar_by_file(fn)
 
-def gen_bar0(symbol,year,ric='',check_only=False, ext_fields=False) :
+def gen_bar0(symbol,year,check_only=False, ext_fields=False, ibbar=True, spread=None) :
     year =  str(year)  # expects a string
-    if ric=='' :
-        ric=symbol
-    fn=glob.glob(symbol+'/'+ric+'??_[12]*.csv*')
+    if ibbar :
+        fn=glob.glob('hist/'+symbol+'/'+symbol+'*_[12]*_qt.csv*')
+    else :
+        fn=glob.glob(symbol+'/'+symbol+'*_[12]*.csv*')
+
     ds=[]
     de=[]
     fn0=[]
@@ -782,10 +683,10 @@ def gen_bar0(symbol,year,ric='',check_only=False, ext_fields=False) :
         if os.stat(f).st_size < 500 :
             print '\t\t\t ***** ', f, ' is too small, ignored'
             continue
-        ds0=f.split('/')[1].split('_')[1]
+        ds0=f.split('/')[-1].split('_')[1]
         if ds0[:4]!=year :
             continue
-        de0=f.split('/')[1].split('_')[2].split('.')[0]
+        de0=f.split('/')[-1].split('_')[2].split('.')[0]
         ds.append(ds0)
         de.append(de0)
         fn0.append(f)
@@ -814,7 +715,10 @@ def gen_bar0(symbol,year,ric='',check_only=False, ext_fields=False) :
             os.system('gunzip '+f)
             f = f[:-3]
         print 'reading bar file ',f
-        b=bar_by_file(f)
+        if ibbar :
+            _,_,b=bar_by_file_ib(f[:-7],spread)
+        else :
+            b=bar_by_file(f)
         ba, sd, ed = write_daily_bar(b)
         bt=ba[:,0]
         lr=ba[:,1]
@@ -832,12 +736,12 @@ def gen_bar0(symbol,year,ric='',check_only=False, ext_fields=False) :
 
     return bar_lr
 
-def gen_bar(symbol, year_s=1998, year_e=2018, ric='', check_only=False, ext_fields=True) :
+def gen_bar(symbol, year_s=1998, year_e=2018, check_only=False, ext_fields=True) :
     ba=[]
     years=np.arange(year_s, year_e+1)
     for y in years :
         try :
-            barlr=gen_bar0(symbol,str(y),ric=ric,check_only=check_only,ext_fields=ext_fields)
+            barlr=gen_bar0(symbol,str(y),check_only=check_only,ext_fields=ext_fields)
             if len(barlr) > 0 :
                 ba.append(barlr)
         except :
