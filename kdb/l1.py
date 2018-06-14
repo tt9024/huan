@@ -581,6 +581,48 @@ def write_daily_bar(bar,bar_sec=5) :
 
     return np.vstack(barr), trd_day_start, trd_day_end
 
+def get_inc_idx(ts) :
+    """
+    This gets a index into the ts that is strictly
+    increasing. i.e. t_i > t_j, for all j<i
+    Used in fitering IB csv file, where timestamp
+    could get back due to repeated downloading
+    of same period.  
+    ts: a 1d array
+    return: index into ts that is increasing
+    """
+
+    N = len(ts)
+    assert N > 0
+
+    ixa=np.arange(N)
+    dts = ts[1:]-ts[:-1]
+    nix = np.nonzero(dts<=0)[0]
+    if len(nix) == 0 :
+        return ixa
+
+    dix = np.array([])
+    ix0 = nix[0]
+    for i0 in np.arange(len(nix)) :
+        # filter out index starting from i0+1
+        # to where it recovers
+        if nix[i0]<ix0 :
+            continue
+
+        ix1 = np.nonzero(ts > ts[nix[i0]])[0]
+        if len(ix1) ==0:
+            # delete all from nix[i0]+1 to end
+            dix = np.r_[dix, np.arange(nix[i0]+1,N,1)]
+            break
+        else :
+            # delete all from nix[i0]+1 to ix1[0] (exclusive)
+            dix = np.r_[dix, np.arange(nix[i0]+1, ix1[0],1)]
+            ix0 = ix1[0]
+
+    if len(dix) > 0 :
+        ixa = np.delete(ixa, dix)
+    return ixa
+
 def bar_by_file_ib(fn,bid_ask_spd,bar_qt=None,bar_trd=None) :
     """ 
     _qt.csv and _trd.csv are expected to exist for the given fn
@@ -592,25 +634,16 @@ def bar_by_file_ib(fn,bid_ask_spd,bar_qt=None,bar_trd=None) :
         bar_trd=np.genfromtxt(fn+'_trd.csv',delimiter=',',usecols=[0,1,2,3,4,5,6,7]) #,dtype=[('utc','i8'),('open','<f8'),('high','<f8'),('low','<f8'),('close','<f8'),('vol','i8'),('cnt','i8'),('wap','<f8')])
 
     # use quote as ref
-    ix0 = min(bar_qt.shape[0], bar_trd.shape[0])
-    qts=bar_qt[:ix0,0]
-    tts=bar_trd[:ix0,0]
-    assert len(qts) > 3 and len(tts) > 3, 'too few bars found at ' + fn
-
-    # take only the part where time is monotonically increasing
-    ix = np.nonzero(qts[1:]-qts[:-1]<=0)[0]
-    if len(ix) > 0 :
-        print 'truncate quote from ', ix0, ' to ', ix[0]
-        ix0 = ix[0]+1
-    ix = np.nonzero(tts[1:ix0]-tts[:ix0-1]<=0)[0]
-    if len(ix) > 0 :
-        ix0 = ix[0]+1
-        print 'truncate trade from ', ix0, ' to ', ix[0]
-
-    bar_qt = bar_qt[:ix0,:]
-    bar_trd = bar_trd[:ix0,:]
-    qts=bar_qt[:ix0,0]
-    tts=bar_trd[:ix0,0]
+    nqt =  bar_qt.shape[0]
+    assert nqt > 3,  'too few bars found at ' + fn
+    
+    # make sure the time stamps strictly increasing
+    qix=get_inc_idx(bar_qt[:,0])
+    tix=get_inc_idx(bar_trd[:,0])
+    bar_qt = bar_qt[qix,:]
+    bar_trd = bar_trd[tix,:]
+    qts=bar_qt[:,0]
+    tts=bar_trd[:,0]
 
     assert len(np.nonzero(qts[1:]-qts[:-1]<0)[0]) == 0, 'quote time stamp goes back'
     assert len(np.nonzero(tts[1:]-tts[:-1]<0)[0]) == 0, 'trade time stamp goes back'
