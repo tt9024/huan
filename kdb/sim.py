@@ -170,8 +170,8 @@ def getXTrain(wb5m,y0=-60,y1=-30,wt_decay=0.1,fd=None) :
     X2=Xvbs(wb5m[:,:,3])
     Y0,mu,sd=getYTrain(wb5m,y0=y0,y1=y1,wt_decay=wt_decay,fd=fd)
     X3=YprevTrain(Y0)
-    X=np.vstack((X1.T,X2.T,X3.T)).T
-    #X=np.vstack((X1.T,X3.T)).T
+    #X=np.vstack((X1.T,X2.T,X3.T)).T
+    X=np.vstack((X1.T,X3.T)).T
     #X=np.vstack((X1.T,X2.T,X3.T,(X1[:,6]*X2[:,0]).T)).T
 
     #X=X1.copy()
@@ -188,8 +188,8 @@ def getXTest(wb5m,Ytrain,xmu,xsd,ymu,ysd,y0=-60,y1=-30,fd=None) :
     X2=Xvbs(wb5m[:,:,3])
     Y0=getYTest(wb5m,ymu,ysd,y0=y0,y1=y1,fd=fd)
     X3=YprevTest(Y0,Ytrain)
-    X=np.vstack((X1.T,X2.T,X3.T)).T
-    #X=np.vstack((X1.T,X3.T)).T
+    #X=np.vstack((X1.T,X2.T,X3.T)).T
+    X=np.vstack((X1.T,X3.T)).T
     #X=np.vstack((X1.T,X2.T,X3.T,(X1[:,6]*X2[:,0]).T)).T
 
     #X=X1.copy()
@@ -253,7 +253,7 @@ def rollY(wb5m, train_idx, test_idx, clf, y0=-60, y1=-30, wt_decay=0.1,train_wt_
     Yt=getYTest(wb5m[test_idx,:,:],ymu,ysd,y0=y0,y1=y1,fd=fd)
     yh,omp,coefix=getYh(X, Y, Xt, clf,wt_decay=train_wt_decay,feat_select=feat_select,fit_sign=fit_sign,wt_neg=wt_neg)
     #print np.corrcoef(yh, Yt)[0,1]
-    return X,Y,Xt,Yt,yh,omp,coefix
+    return X,Y,Xt,Yt,yh,omp,coefix,xmu,xsd
 
 def wt_corr(x1d,y,wt=None,wt_decay=0.1,whiten=True) :
     n=len(x1d)
@@ -738,6 +738,8 @@ def eval_roll0(wb5m, hist, roll, train_wt_decay, clf, feat_select, train_ix0=400
     n=wb5m.shape[0]
     k=(n-train_ix0)/roll
     max_coef=23
+    xmuarr=[]
+    xstdarr=[]
     for i in np.arange(k) :
         if hist==-1 :
             ix0=0
@@ -745,13 +747,15 @@ def eval_roll0(wb5m, hist, roll, train_wt_decay, clf, feat_select, train_ix0=400
             ix0=train_ix0+i*roll-hist
         ix1=train_ix0+i*roll
         #print ix0, ix1
-        X0, Y0, X1, Y1, yh0, omp, coefix=rollY(wb5m,np.arange(ix0,ix1), np.arange(ix1,ix1+roll),clf,train_wt_decay=train_wt_decay,feat_select=feat_select,fit_sign=fit_sign)
+        X0, Y0, X1, Y1, yh0, omp, coefix, xmu, xstd=rollY(wb5m,np.arange(ix0,ix1), np.arange(ix1,ix1+roll),clf,train_wt_decay=train_wt_decay,feat_select=feat_select,fit_sign=fit_sign)
         c0=np.zeros(max_coef)
         if not fit_sign :
             c0[coefix]=omp.coef_
             c0[-1]=omp.intercept_
 
         coef.append(c0.copy())
+        xmuarr.append(xmu)
+        xstdarr.append(xstd)
         yh=np.r_[yh,yh0]
         yt=np.r_[yt,Y1]
         cor3.append(np.corrcoef(Y1,yh0)[0,1])
@@ -789,7 +793,7 @@ def eval_roll0(wb5m, hist, roll, train_wt_decay, clf, feat_select, train_ix0=400
 
     else :
         ax1=ax2=ax3=None
-    return coef, yt, yh, dt, cor3, [ax1,ax2,ax3]
+    return coef, yt, yh, dt, cor3, [ax1,ax2,ax3], xmuarr, xstdarr
 
 ######
 #fitted parameters:
@@ -855,7 +859,7 @@ def get_signal(wb5m) :
     clf=linear_model.SGDRegressor(loss='huber',alpha=0.5)
     cor5=[]
     for i in np.arange(32) :
-        X0, Y0, X1, Y1, yh0, omp=sim.rollY(wb5m,np.arange(400)+i*20, np.arange(20)+400+i*20,clf,train_wt_decay=0.2,feat_select=True)
+        X0, Y0, X1, Y1, yh0, omp, coef,xmu, xstd=sim.rollY(wb5m,np.arange(400)+i*20, np.arange(20)+400+i*20,clf,train_wt_decay=0.2,feat_select=True)
         cor5.append(np.corrcoef(yh0, Y1)[0,1])
     return np.array(cor5)
 
