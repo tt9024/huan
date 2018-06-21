@@ -27,7 +27,7 @@ ALL_COL = ALL_COL_RAW + len(derived_col)
 weekday=['mon','tue','wed','thu','fri','sat','sun']
 def col_name(col) :
     if col<ALL_COL_RAW:
-        return repo_col.keys()[np.nonzero(np.array(repo_col.values())==col)[0]]
+        return repo_col.keys()[np.nonzero(np.array(repo_col.values())==col)[0][0]]
     elif col<ALL_COL:
         return derived_col.keys()[np.nonzero(np.array(derived_col.values())==col-ALL_COL_RAW)[0]]
     raise ValueError('col ' + str(col) + ' not found!')
@@ -113,7 +113,8 @@ class DailyBar :
         assert self.b[i][eix,utcc]==utc_ed, 'repo bar of end not found ' + day + ': ' + str(utc_ed)
         return i, six, eix, day
 
-    def fill_daily_bar_col(self, day, bar_sec, c) :
+    @staticmethod
+    def fill_daily_bar_col(day, bar_sec, c) :
         """
         first bar starts at the previous day's 18:00+bar_sec, last bar ends at this day's last bar
         before or equal 17:00
@@ -147,7 +148,7 @@ class DailyBar :
                 # a missing day, filling in ones as place holder
                 print 'filling zeros for missing day ', day
                 for c in cols :
-                    ca[c]=np.r_[ca[c],self.fill_daily_bar_col(day,bar_sec,c)]
+                    ca[c]=np.r_[ca[c],DailyBar.fill_daily_bar_col(day,bar_sec,c)]
                 continue
 
             # since it's a daily bar, ix should
@@ -288,7 +289,7 @@ def getwt(tcnt,decay,scl=10) :
     wt=1.0/(1.0+np.exp(-decay*x))
     return wt
 
-def plot_weekly_bar(wbdict,dbar,wt=[], wt_decay=0.1,title_str='') :
+def plot_weekly_bar(wbdict,wt=[], wt_decay=0.1,title_str='') :
     """
     plot 6 subplots from default columns, assuming the first 5 colums always
     the [utcc,lrc,volc,vbsc, vol1c], other columns are ignored
@@ -318,11 +319,11 @@ def plot_weekly_bar(wbdict,dbar,wt=[], wt_decay=0.1,title_str='') :
 
     dt=[]
     # create one week of any days
-    utc=dbar.fill_daily_bar_col('20160905',bsec,utcc)
-    utc=np.r_[utc,dbar.fill_daily_bar_col('20160906',bsec,utcc)]
-    utc=np.r_[utc,dbar.fill_daily_bar_col('20160907',bsec,utcc)]
-    utc=np.r_[utc,dbar.fill_daily_bar_col('20160908',bsec,utcc)]
-    utc=np.r_[utc,dbar.fill_daily_bar_col('20160909',bsec,utcc)]
+    utc=DailyBar.fill_daily_bar_col('20160905',bsec,utcc)
+    utc=np.r_[utc,DailyBar.fill_daily_bar_col('20160906',bsec,utcc)]
+    utc=np.r_[utc,DailyBar.fill_daily_bar_col('20160907',bsec,utcc)]
+    utc=np.r_[utc,DailyBar.fill_daily_bar_col('20160908',bsec,utcc)]
+    utc=np.r_[utc,DailyBar.fill_daily_bar_col('20160909',bsec,utcc)]
     for u0 in utc :
         dt.append(datetime.datetime.fromtimestamp(u0))
 
@@ -469,8 +470,8 @@ def plot_dist(lr, dist=['dweibull','cauchy','dgamma','norm'],title_str='') :
     fig=pl.figure()
     pl.title(title_str)
     for d in np.arange(n) :
-        ax=fig.add_subplot(n,2,2*d)
-        ax2=fig.add_subplot(n,2,2*d+1)
+        ax=fig.add_subplot(n,2,2*d+1)
+        ax2=fig.add_subplot(n,2,2*d+2)
         f0.f3(lr,dist[d],True,ax=ax2,ax2=ax)
 
 def plot_dist_weekly_by_ix(wbdict, ix, dist=['dweibull','cauchy','dgamma','norm'],if_plot_dist=False, param_str='') :

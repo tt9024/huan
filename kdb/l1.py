@@ -642,6 +642,21 @@ def bar_by_file_ib(fn,bid_ask_spd,bar_qt=None,bar_trd=None) :
     tix=get_inc_idx(bar_trd[:,0])
     bar_qt = bar_qt[qix,:]
     bar_trd = bar_trd[tix,:]
+
+    # also make sure starts from an hour that is less than 16 o'clock
+    # this is to be consistent with Reuters data.  IB data
+    # file starts from start day's previous day's 18:00, while
+    # Reuters KDB data file starts from start day's 0am. 
+    qts = bar_qt[:,0]
+    ix=0
+    dt=datetime.datetime.fromtimestamp(qts[0])
+    if dt.hour > 16 :
+        t0 = qts[0] + (24-dt.hour)*3600
+        ix=np.searchsorted(qts, t0)
+        print 'cutting out leading ', ix , ' bars'
+        bar_qt=bar_qt[ix:,:]
+        bar_trd=bar_trd[ix:,:]
+
     qts=bar_qt[:,0]
     tts=bar_trd[:,0]
 
@@ -682,6 +697,8 @@ def bar_by_file_ib(fn,bid_ask_spd,bar_qt=None,bar_trd=None) :
     """
     spd=bid_ask_spd*np.clip(np.sqrt((bar_qt[:,2]-bar_qt[:,3])/bid_ask_spd),1,2)
     mid=(bar_qt[:,2]+bar_qt[:,3])/2
+    #mid=np.mean(bar_qt[:,1:5], axis=1)
+
     vb=np.clip((vwap-(mid-spd/2))/spd,0,1)*vol
     vs=vol-vb
 
@@ -702,7 +719,7 @@ def get_contract_bar(symbol, contract, yyyy) :
     fn=f[0]
     return bar_by_file(fn)
 
-def gen_bar0(symbol,year,check_only=False, ext_fields=False, ibbar=True, spread=None) :
+def gen_bar0(symbol,year,check_only=False, ext_fields=False, ibbar=True, spread=None, bar_sec=5) :
     year =  str(year)  # expects a string
     if ibbar :
         fn=glob.glob('hist/'+symbol+'/'+symbol+'*_[12]*_qt.csv*')
@@ -752,7 +769,7 @@ def gen_bar0(symbol,year,check_only=False, ext_fields=False, ibbar=True, spread=
             _,_,b=bar_by_file_ib(f[:-7],spread)
         else :
             b=bar_by_file(f)
-        ba, sd, ed = write_daily_bar(b)
+        ba, sd, ed = write_daily_bar(b,bar_sec=bar_sec)
         bt=ba[:,0]
         lr=ba[:,1]
         vl=ba[:,5]
