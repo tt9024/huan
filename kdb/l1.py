@@ -15,15 +15,20 @@ class TradingDayIterator :
     def yyyymmdd(self) :
         return datetime.datetime.strftime(self.dt, '%Y%m%d')
 
+    def weekday(self) :
+        return self.dt.weekday()
+
     def next(self) :
         self.dt+=datetime.timedelta(1)
         while self.dt.weekday() > 4 :
             self.dt+=datetime.timedelta(1)
+        return self
 
     def prev(self) :
         self.dt-=datetime.timedelta(1)
         while self.dt.weekday() > 4 :
             self.dt-=datetime.timedelta(1)
+        return self
 
     def prev_n_trade_day(self, delta) :
         wk=delta/5
@@ -32,6 +37,7 @@ class TradingDayIterator :
         if self.dt.weekday() < wd :
             delta += 2
         self.dt-=datetime.timedelta(delta)
+        return self
 
     def next_n_trade_day(self, delta) :
         wk=delta/5
@@ -40,6 +46,7 @@ class TradingDayIterator :
         if 4 - self.dt.weekday() < wd :
             delta += 2
         self.dt+=datetime.timedelta(delta)
+        return self
 
     def last_month_day(self) :
         mm=self.dt.month
