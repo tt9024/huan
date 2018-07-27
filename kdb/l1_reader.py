@@ -51,6 +51,7 @@ class DailyBar :
     vol3: std of raw lr in bar_sec
     vol4: mse of linear fit (with intercept) of all raw lr 
           within bar
+    """
     def __init__(self, repo) :
         self.b=np.load(repo)['bar']
         self.bs=int(b[0][1][utcc]-b[0][0][utcc] + 0.5)
@@ -61,7 +62,7 @@ class DailyBar :
             totbar += len(b0)
         self.utc0=np.array(utc0)
         print 'loaded ', totbar, ' bars in ', len(utc0), ' arrays. bar_sec ', self.bs
-    """
+
     def set_repo(self, b) :
         """
         repo format is in [bt,lr,vl,vbs,lrhl,vwap,ltt,lpx]

@@ -130,6 +130,9 @@ RollDates = {'CL':  [MonthlyFrontContract,   [17, 17, 17, 17, 17, 17, 17, 17, 17
 FXFutures = ['6A','6B','6C','6E','6J','6M','6N','6Z','6R','AD','BP','CD','URO','JY','MP','NE']
 RicMap = {'6A':'AD', '6B':'BP', '6C':'CD', '6E':'URO', '6J':'JY', '6M':'MP', '6N':'NE','ZC':'C'}
 
+# todo: fill this map
+SymbolTicks = {'CL':0.01, 'ES':0.25, 'NG':0.001}
+
 def is_fx_future(symbol) :
     return symbol in FXFutures
 
