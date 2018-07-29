@@ -48,11 +48,13 @@ class TradingDayIterator :
         self.dt+=datetime.timedelta(delta)
         return self
 
-    def last_month_day(self) :
+    def last_month_day(self, dc=1) :
         mm=self.dt.month
-        self.next()
+        self.next_n_trade_day(dc)
+        #self.next()
         mm2=self.dt.month
-        self.prev()
+        self.prev_n_trade_day(dc)
+        #self.prev()
         if mm != mm2 :
             return True
         return False
@@ -131,7 +133,7 @@ FXFutures = ['6A','6B','6C','6E','6J','6M','6N','6Z','6R','AD','BP','CD','URO','
 RicMap = {'6A':'AD', '6B':'BP', '6C':'CD', '6E':'URO', '6J':'JY', '6M':'MP', '6N':'NE','ZC':'C'}
 
 # todo: fill this map
-SymbolTicks = {'CL':0.01, 'ES':0.25, 'NG':0.001}
+SymbolTicks = {'CL':0.01, 'ES':0.25, 'NG':0.001, 'LCO':0.01, 'HO':0.0001}
 
 def is_fx_future(symbol) :
     return symbol in FXFutures
@@ -152,7 +154,7 @@ def FC_Brent_new(yyyymmdd) :
             else :
                 return 'LCOJ6'
     else :
-        if not ti.last_month_day() :
+        if not ti.last_month_day(5) :
             ms=MonthlyFrontContract[m%12]
         else :
             ms=MonthlyFrontContract[(m+1)%12]
