@@ -15,18 +15,18 @@ def write_daily_bar(bar,bar_sec=5,last_close_px=None) :
 
     # get the initial day, last price
     day_start=dt.strftime('%Y%m%d')
-    utc_s = int(TradingDayIterator.local_ymd_to_utc(day_start, 18, 0, 0))
+    utc_s = int(l1.TradingDayIterator.local_ymd_to_utc(day_start, 18, 0, 0))
     if last_close_px is None :
         x=np.searchsorted(bar[1:,0], float(utc_s-3600+bar_sec))
         last_close_px=bar[x,2]
         print 'last close price set to previous close at ', datetime.datetime.fromtimestamp(bar[x,0]), ' px: ', last_close_px
     else :
-        print 'last close price set to ' last_close_px
+        print 'last close price set to ', last_close_px
 
     day_end=datetime.datetime.fromtimestamp(bar[-1,0]).strftime('%Y%m%d')
     # deciding on the trading days
     if dt.hour > 17 :
-        ti=TradingDayIterator(day_start,adj_start=False)
+        ti=l1.TradingDayIterator(day_start,adj_start=False)
         ti.next()
         trd_day_start=ti.yyyymmdd()
     else :
@@ -34,14 +34,14 @@ def write_daily_bar(bar,bar_sec=5,last_close_px=None) :
     trd_day_end=day_end
     print 'preparing bar from ', day_start, ' to ', day_end, ' , trading days: ', trd_day_start, trd_day_end
 
-    ti=TradingDayIterator(day_start, adj_start=False)
+    ti=l1.TradingDayIterator(day_start, adj_start=False)
     day=ti.yyyymmdd()  # day is the start_day
     barr=[]
     TRADING_HOURS=23
     while day < day_end:
         ti.next()
         day1=ti.yyyymmdd()
-        utc_e = int(TradingDayIterator.local_ymd_to_utc(day1, 17,0,0))
+        utc_e = int(l1.TradingDayIterator.local_ymd_to_utc(day1, 17,0,0))
 
         # get start backwards for starting on a Sunday
         utc_s = utc_e - TRADING_HOURS*3600
@@ -147,7 +147,7 @@ def bar_by_file_ib(fn,bid_ask_spd,bar_qt=None,bar_trd=None) :
     print 'readig ', fn
     # getting gzip if necessary
     gz = False
-    for b, f in zip([bar_qt, bar_trd],[fnqt fntd]) :
+    for b, f in zip([bar_qt, bar_trd],[fnqt, fntd]) :
         if b is not None :
             continue
         if l1.get_file_size(f) == 0 :
@@ -236,11 +236,11 @@ def get_future_spread(symbol) :
 
 
 def fn_from_dates(symbol, sday, eday) :
-    fn=glob.glob('hist/'+symbol+'/'+symbol+'*_[12]*_qt.csv*')
+    bfn=glob.glob('hist/'+symbol+'/'+symbol+'*_[12]*_qt.csv*')
     ds=[]
     de=[]
     fn=[]
-    for f in fn :
+    for f in bfn :
         if os.stat(f).st_size < 500 :
             print '\t\t\t ***** ', f, ' is too small, ignored'
             continue
@@ -263,7 +263,7 @@ def fn_from_dates(symbol, sday, eday) :
     ix=np.argsort(ds)
     dss=np.array(ds)[ix]
     des=np.array(de)[ix]
-    fns=np.array(f0)[ix]
+    fns=np.array(fn)[ix]
     # remove the files that are containeda
     desi=des.astype(int)
     ix = np.nonzero(desi[1:]-desi[:-1]<=0)[0]
@@ -272,12 +272,12 @@ def fn_from_dates(symbol, sday, eday) :
     fns = np.delete(fns, ix+1)
     return fns
 
-def gen_daily_bar_ib(symbol, sday, eday, bar_sec, check_only=False) :
+def gen_daily_bar_by_file(symbol, sday, eday, bar_sec, check_only=False) :
     """
     generate IB dily bars from sday to eday.
     It is intended to be used to add too the daily bar repo manually
     """
-    fn = fn_from_ates(symbol, sday, eday)
+    fn = fn_from_dates(symbol, sday, eday)
     spread = get_future_spread(symbol)
     print 'Got ', len(fn), ' files: ', fn, ' spread: ', spread
 

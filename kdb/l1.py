@@ -105,6 +105,8 @@ QuartlyFrontContract =    ['H','H','H','M','M','M','U','U','U','Z','Z','Z']
 OddMonthlyFrontContract = ['H','H','K','K','N','N','U','U','Z','Z','Z','H']
 RollDates = {'CL':  [MonthlyFrontContract,   [17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17]], \
              'LCO': [MonthlyFrontContract,   [12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12]], \
+             'LFU': [MonthlyFrontContract,   [12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12]], \
+             'LOU': [MonthlyFrontContract,   [12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12]], \
              'NG':  [MonthlyFrontContract,   [24, 22, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24]], \
              'HO':  [MonthlyFrontContract,   [26, 24, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26]], \
              'RB':  [MonthlyFrontContract,   [26, 24, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26]], \
@@ -131,14 +133,14 @@ RollDates = {'CL':  [MonthlyFrontContract,   [17, 17, 17, 17, 17, 17, 17, 17, 17
 
 FXFutures = ['6A','6B','6C','6E','6J','6M','6N','6Z','6R','AD','BP','CD','URO','JY','MP','NE']
 RicMap = {'6A':'AD', '6B':'BP', '6C':'CD', '6E':'URO', '6J':'JY', '6M':'MP', '6N':'NE','ZC':'C'}
-
+ICEFutures = ['LCO','LFU','LOU']
 # todo: fill this map
-SymbolTicks = {'CL':0.01, 'ES':0.25, 'NG':0.001, 'LCO':0.01, 'HO':0.0001}
+SymbolTicks = {'CL':0.01, 'ES':0.25, 'NG':0.001, 'LCO':0.01, 'LFU':0.25, 'LOU':0.0001, 'HO':0.0001}
 
 def is_fx_future(symbol) :
     return symbol in FXFutures
 
-def FC_Brent_new(yyyymmdd) :
+def FC_ICE_new(symbol, yyyymmdd) :
     ti=TradingDayIterator(yyyymmdd)
     y=ti.dt.year
     m=ti.dt.month
@@ -147,28 +149,31 @@ def FC_Brent_new(yyyymmdd) :
     # make a case of 2016.1.14
     if y==2016 and m==1 :
         if d < 14 :
-            return 'LCOG6'
+            return symbol + 'G6'
         else :
             if not ti.last_month_day() :
-                return 'LCOH6'
+                return symbol + 'H6'
             else :
-                return 'LCOJ6'
+                return symbol + 'J6'
     else :
-        if not ti.last_month_day(5) :
+        # roll 6 days before the delivery 
+        # seems to capture most of the flow
+        rolldates=6
+        if not ti.last_month_day(rolldates) :
             ms=MonthlyFrontContract[m%12]
         else :
             ms=MonthlyFrontContract[(m+1)%12]
         ys=str(y)[-1]
         if m>=10 and ms in ['F','G','H','J']:
             ys=str(y+1)[-1]
-        return 'LCO'+ms+ys
+        return symbol+ms+ys
 
 def FC(symbol, yyyymmdd) :
     dt=datetime.datetime.strptime(yyyymmdd,'%Y%m%d')
-    if symbol=='LCO':
-        # brent roll is tricky
+    if symbol in ICEFutures :
+        # ice roll is tricky
         if dt.year>=2016:
-            return FC_Brent_new(yyyymmdd)
+            return FC_ICE_new(symbol, yyyymmdd)
     if symbol in FXFutures :
         symbol0='FX'
     else :
