@@ -137,6 +137,44 @@ ICEFutures = ['LCO','LFU','LOU']
 # todo: fill this map
 SymbolTicks = {'CL':0.01, 'ES':0.25, 'NG':0.001, 'LCO':0.01, 'LFU':0.25, 'LOU':0.0001, 'HO':0.0001}
 
+#######################################################################
+## !!! Be very careful about changin the following ven_sym_map and
+## venue_by_symbol definitions as ibbar uses it for live trading
+## At minimum, do not delete any of the definitions
+## Adding should not be a problem
+ven_sym_map={'NYM':['CL','NG','HO','RB','GC','SI','HG'], \
+             'CME':['ES','6A','6C','6E','6B','6J','6N','6R','6Z','6M'],\
+             'CBT':['ZB','ZN','ZF','ZC'],\
+             'EUX':['FDX','STXE','FGBX','FGBL','FGBS','FGBM'],\
+             'FX' :['AUD.CAD','AUD.JPY','AUD.NZD','CAD.JPY','EUR.AUD',\
+                    'EUR.CAD','EUR.CHF','EUR.GBP','EUR.JPY','EUR.NOK',\
+                    'EUR.SEK','EUR.TRY','EUR.ZAR','GBP.CHF','GBP.JPY',\
+                    'NOK.SEK','NZD.JPY','EUR.USD','USD.ZAR','USD.TRY',\
+                    'USD.MXN','USD.CNH','XAU.USD','XAG.USD'],\
+             'ICE':['LCO','LFU','LOU']};
+
+future_venues=['NYM','CME','CBT','EUX','ICE']
+fx_venues=['FX']
+def venue_by_symbol(symbol) :
+    for k,v in ven_sym_map.items() :
+        if symbol in v :
+            return k
+    raise ValueError('venue not found for ' + symbol)
+
+def get_start_end_hour(venue) :
+    """
+    start on previous day's 18, end on 17, 
+    except ICE, starts from 20 to 18
+    To add other non cme/ice venues, such as IDX and FX venues
+    """
+    if venue == ICE :
+        return -4, 18
+    return -6, 17
+## At minimum, do not delete any of the definitions
+## Adding should not be a problem
+## check with ib/kisco/ibbar.py, it uses the above two functions for live
+##########################################################################
+
 def is_fx_future(symbol) :
     return symbol in FXFutures
 
@@ -735,6 +773,17 @@ def get_contract_bar(symbol, contract, yyyy) :
     assert len(f) == 1, 'problem finding '+ fn + ', got ' + str(f)
     fn=f[0]
     return bar_by_file(fn)
+
+### repo bar columns of kdb
+repo_col={'utc':0, 'lr':1, 'vol':2, 'vbs':3, 'lrhl':4, 'vwap':5, 'ltt':6, 'lpx':7}
+utcc=repo_col['utc']
+lrc=repo_col['lr']
+volc=repo_col['vol']
+vbsc=repo_col['vbs']
+lrhlc=repo_col['lrhl']
+vwapc=repo_col['vwap']
+lttc=repo_col['ltt']
+lpxc=repo_col['lpx']
 
 def gen_bar0(symbol,year,check_only=False, ext_fields=False, ibbar=True, spread=None, bar_sec=5) :
     year =  str(year)  # expects a string
