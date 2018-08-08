@@ -24,31 +24,35 @@ def bar_by_file(fn, skip_header=5) :
     ix=np.argsort(bar[:, 0])
     return bar[ix, :]
 
-def write_daily_bar(bar,bar_sec=5) :
+def write_daily_bar(symbol,bar,bar_sec=5) :
     import pandas as pd
+    start_hour, end_hour = l1.get_start_end_hour(l1.venue_by_symbol(symbol))
+    TRADING_HOURS=end_hours-start_hour
+    start_hour = start_hour % 24
+
     dt0=datetime.datetime.fromtimestamp(bar[0,0])
-    #assert dt.hour < 18 , 'start of bar file hour > 18'
+    #assert dt.hour < start_hour , 'start of bar file hour > ' + str(start_hour)
     i=0
     # seek to the first bar greater or equal to 18 on that day
     # as KDB files starts from 0 o'clock
     dt=dt0
-    while dt.hour<18 :
+    while dt.hour<start_hour :
         i+=1
         dt=datetime.datetime.fromtimestamp(bar[i,0])
         if dt.day != dt0.day :
             #raise ValueError('first day skipped, no bars between 18pm - 24am detected')
-            print 'first day skipped, no bars between 18pm - 24am detected'
+            print 'first day skipped, no bars between ', start_hour, ' - 24am detected'
             break
 
     # get the initial day, last price
     day_start=dt.strftime('%Y%m%d')
-    utc_s = int(l1.TradingDayIterator.local_ymd_to_utc(day_start, 18, 0, 0))
+    utc_s = int(l1.TradingDayIterator.local_ymd_to_utc(day_start, start_hour, 0, 0))
     x=np.searchsorted(bar[1:,0], float(utc_s-3600+bar_sec))
     last_close_px=bar[x,2]
     print 'last close price set to previous close at ', datetime.datetime.fromtimestamp(bar[x,0]), ' px: ', last_close_px
     day_end=datetime.datetime.fromtimestamp(bar[-1,0]).strftime('%Y%m%d')
     # deciding on the trading days
-    if dt.hour > 17 :
+    if dt.hour > end_hour :
         ti=l1.TradingDayIterator(day_start,adj_start=False)
         ti.next()
         trd_day_start=ti.yyyymmdd()
@@ -60,13 +64,12 @@ def write_daily_bar(bar,bar_sec=5) :
     ti=l1.TradingDayIterator(day_start, adj_start=False)
     day=ti.yyyymmdd()  # day is the start_day
     barr=[]
-    TRADING_HOURS=23
     trade_days = []
     col_arr = []
     while day < day_end:
         ti.next()
         day1=ti.yyyymmdd()
-        utc_e = int(l1.TradingDayIterator.local_ymd_to_utc(day1, 17,0,0))
+        utc_e = int(l1.TradingDayIterator.local_ymd_to_utc(day1, end_hour,0,0))
 
         # get start backwards for starting on a Sunday
         utc_s = utc_e - TRADING_HOURS*3600
@@ -80,7 +83,7 @@ def write_daily_bar(bar,bar_sec=5) :
         ix_utc=((bar0[:,0]-float(utc_s))/bar_sec+1e-9).astype(int)
         bar_utc=np.arange(utc_s+bar_sec, utc_e+bar_sec, bar_sec) # bar time will be time of close price, as if in prod
 
-        print 'getting bar ', day+'-18:00', day1+'-17:00', ' , got ', j-i, 'bars'
+        print 'getting bar ', day+'-'+str(start_hour), day1+'-'+str(end_hour),' , got ', j-i, 'bars'
         # start to construct bar
         if j<=i :
             print ' NO bars found, skipping'
@@ -173,12 +176,9 @@ def write_daily_bar(bar,bar_sec=5) :
 
     return barr, trade_days, col_arr
 
-def gen_bar0(symbol,year,check_only=False, ibbar=True, spread=None, bar_sec=5) :
+def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5) :
     year =  str(year)  # expects a string
-    if ibbar :
-        fn=glob.glob('hist/'+symbol+'/'+symbol+'*_[12]*_qt.csv*')
-    else :
-        fn=glob.glob(symbol+'/'+symbol+'*_[12]*.csv*')
+    fn=glob.glob(symbol+'/'+symbol+'*_[12]*.csv*')
 
     ds=[]
     de=[]
@@ -218,11 +218,8 @@ def gen_bar0(symbol,year,check_only=False, ibbar=True, spread=None, bar_sec=5) :
             os.system('gunzip '+f)
             f = f[:-3]
         print 'reading bar file ',f
-        if ibbar :
-            _,_,b=bar_by_file_ib(f[:-7],spread)
-        else :
-            b=bar_by_file(f)
-        ba, td, col = write_daily_bar(b,bar_sec=bar_sec)
+        b=bar_by_file(f)
+        ba, td, col = write_daily_bar(symbol b,bar_sec=bar_sec)
         bar_lr += ba  # appending daily bars
         td_arr += td
         col_arr += col

@@ -1,5 +1,6 @@
 import numpy as np
 import l1
+import copy
 
 # This is the repository for storing
 # daily bars of all assets.  Each asset
@@ -135,13 +136,14 @@ class RepoDailyBar :
         except :
             raise ValueError('idx.npz not found from ' + self.path)
 
-        self.veue = self.idx['global']['venue']
+        self.venue = self.idx['global']['venue']
         self.sh,self.eh = self.idx['global']['sehour']
 
     def update(self, bar_arr, day_arr, col_arr, bar_sec) :
         """
         input
           bar_arr: list of daily bar, increasing in time stamp but may have holes
+                   daily bar is a 2-d array shape [totbars, col]
           day_arr: list of trading days of each bar
           col_arr: list of columns on each day
           bar_sec: the raw bar second from hist/bar files
@@ -155,12 +157,15 @@ class RepoDailyBar :
         overwriting the existing. 
         """
 
-        totbars = (self.eh - self.sh) * (3600 / bar_sec)
+        totbars = self._get_totalbars(bar_sec)
         for b, d, c in zip(bar_arr, day_arr, col_arr) :
             print 'update bar: ', d, ' bar_cnt: ', len(b), '/',totbars, ' ... ',
-            rb, bs, col = self._load_day(d)
+            rb, col, bs = self._load_day(d)
             if len(rb) == 0 :  # add all the columns
                 print ' a new day, add all col: ', c
+                if len(b) != totbars :
+                    print '!!! len(b) != ', totbars, ' skipped...'
+                    continue
                 rb = b
                 bs = bar_sec
                 c = col
@@ -172,7 +177,6 @@ class RepoDailyBar :
                 if len(rb) != len(b) :
                     print ' !!! number of bars mismatch, skip'
                     continue
-                dts = datetime.datetime.fromtimestamp(b[0,0])
                 nc = []
                 ncbar = []
                 for i, c0 in enumerate(c) :
@@ -187,9 +191,97 @@ class RepoDailyBar :
                 rb = np.r_[rb.T, np.array(ncbar)].T
 
             # writing back to daily
-            self._dump_day(d, rb, bs, col)
+            self._dump_day(d, rb, col, bs)
+        print 'Done'
 
-    def overwrite(self, bar_arr, day_arr, col_arr) :
-        pass
+    def overwrite(self, bar_arr, day_arr, col_arr, bar_sec, rowix = None) :
+        """
+        This writes each of the bar to the repo, overwrite existing columns
+        if exist, but leave other columns of existing day unchanged. 
+        optional rowix, if set is a two dimensional array, each for a day
+        about the specific rows to be updated.  Used for adding l1 data
+        where gaps are common
+        Note in case adding columns to existing bars, the rowix has to
+        aggree with the totbars, just as update() above. 
+        Refer to update()
+        """
+        totbars = self._get_totalbars(bar_sec)
+        if rowix is None :
+            rowix = np.arange(totbars).tile((len(bar_arr), 1))
+        assert len(bar_arr) == len(rowix), 'len(bar_arr) != len(rowix)'
+        for b, d, c, rix in zip(bar_arr, day_arr, col_arr, rowix) :
+            print 'overwrite bar: ', d, ' bar_cnt: ', len(b), '/', totbars ' ... ',
+            rb, col, bs = self.load_day(d)
+            # just write that in
+            if len(rb) != 0 :
+                print len(rb)
+                if bar_sec != bs :
+                    print 'barsec mismatch, skipping '
+                    continue
+                if len(rb) != totbars :
+                    raise ValueError('repo bar has incorrect row count???')
 
+                for i, c0 in enumerate(c) :
+                    print i, ', ', col_name(c0), 
+                    if c0 in col :
+                        print ' overwriting existing repo '
+                        rb[rix, ci(col, c0)] = b[:, i]
+                        continue
+                    else :
+                        print 'adding to repo '
+                        # but in this case, the rowix has to match totbars
+                        if len(rix) != totbarss :
+                            raise ValueError('rix not equal to totbars for adding column ' + str(len(rix)))
+                        col.append(c0)
+                        rb = np.r_[rb.T, [b[:, i]]].T
+            else :
+                print ' NO bars found, adding all columns as new! '
+                if len(rix) != totbars :
+                    raise ValueError('rix not equal to totbars for adding column ' + str(len(rix)))
+                col = c
+                rb = b
 
+            self._dump_day(d, rb, col, bs)
+
+    def load_day(self, day) :
+        """
+        read a day from repo, files are stored in the day directory
+        each day's index is stored as a key in the repo's symbol 
+        index
+        """
+        col = []
+        bs = 0
+        if day in self.idx['daily'].keys() :
+            bs = self.idx['daily'][day]['bar_sec']
+            col= copy.deepcopy(self.idx['daily'][day]['cols'])
+            try :
+                bfn = self.path+'/daily/'+day+'/bar.npz'
+                bar = np.load(bfn)['bar']
+            except :
+                raise ValueError(bfn+' not found but is in the repo index')
+
+        assert self._get_totalbars(bs) == len(bar), bfn + ' wrong size: '+str(len(bar)) + ' should  be  ' + str(self._get_totalbars(bs)))
+        return bar, bol, bs
+
+    def _dump_day(self, day, bar, col, bar_sec) :
+        """
+        update self.index
+        write bar to repo
+        """
+        assert self._get_totalbars(bar_sec) == len(bar), bfn + ' wrong size: '+str(len(bar)) + ' should be ' + str(self._get_totalbars(bar_sec)) 
+        self.idx['daily'][day] = {'bar_sec':bar_sec, 'cols':copy.deepcopy(col)}
+        bfn = self.path+'/daily/'+day+'/bar.npz'
+        np.savez_compressed(bfn, bar=bar)
+        np.savez_compressed(self.idxfn, idx=self.idx)
+
+    def _get_totalbars(self, bar_sec) :
+        return  (self.eh - self.sh) * (3600 / bar_sec)
+
+class RepoReader  :
+    def __init__(self, repo) :
+        """
+        repo: an instance of RepoDailyBar
+        """
+        self.repo = repo
+
+    def get_daily(self, sday, eday  
