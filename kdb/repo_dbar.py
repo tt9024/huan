@@ -77,7 +77,7 @@ def col_idx(colname) :
     for k, v in repo_col.items() :
         if colname == k :
             return v
-    raise ValueError('col ' + col_name + ' not found')
+    raise ValueError('col ' + colname + ' not found')
 
 def ci(carr, c) :
     for i, c0 in enumerate (carr) :
@@ -243,6 +243,48 @@ class RepoDailyBar :
 
             self._dump_day(d, rb, col, bs)
 
+    def get_daily_bar(self, start_day, day_cnt, bar_sec, end_day=None, cols=[utcc,lrc,volc,vbsc,lpxc], group_days = 5) :
+        """
+        return bars for specified period, with bar period
+        return index of multiday bar starting from
+        start_day, running for day_cnt
+        group_days: 1: daily, 5: weekly
+        """
+        if end_day is not None :
+            print 'end_day not null, got ',
+            ti=l1.TradingDayIterator(start_day)
+            day_cnt=0
+            day=ti.yyyymmdd()
+            while day <= end_day :
+                day_cnt+=1
+                ti.next()
+                day=ti.yyyymmdd()
+        else :
+            ti=l1.TradingDayIterator(start_day)
+            end_day = ti.next_n_trade_day(day_cnt)
+        print day_cnt, ' days from ', start_day, ' to ', end_day
+        assert day_cnt / group_days * group_days == day_cnt, 'Error! group_days ' + str(group_days) + ' not multiple of ', str(day_cnt)
+
+        ti=l1.TradingDayIterator(start_day)
+        day=ti.yyyymmdd()
+        bar = []
+        while day <= end_day :
+            print "reading ", day, 
+            b, c, bs = self.load_day(day)
+            if len(b) == 0 :
+                print "missing, filling zeros"
+                bar.append(self._fill_daily_bar_col(day,bar_sec,c))
+            else :
+                bar.append(self._scale(b, c, bs, cols, bar_sec))
+                print "scale bar_sec from ", bs, " to ", bar_sec
+            ti.next()
+            day=ti.yyyymmdd()
+
+        bar = np.array(bar)
+        if group_days > 1 :
+            bar.reshape((bar.shape[0]/group_days, bar.shape[1]*group_days, bar.shape[2]))
+        return bar
+
     def load_day(self, day) :
         """
         read a day from repo, files are stored in the day directory
@@ -277,11 +319,62 @@ class RepoDailyBar :
     def _get_totalbars(self, bar_sec) :
         return  (self.eh - self.sh) * (3600 / bar_sec)
 
-class RepoReader  :
-    def __init__(self, repo) :
+    def _make_daily_utc(self, day, bar_sec) :
+        totbar = self._get_totalbars(bar_sec)
+        u1 = int(l1.TradingDayIterator.local_ymd_to_utc(day))+self.end_hour*3600
+        u0 = u1 - totbar*bar_sec + bar_sec
+        return np.arange(u0, u1+bar_sec, bar_sec)
+ 
+    def _fill_daily_bar_col(self, day, bar_sec, col_arr) :
         """
-        repo: an instance of RepoDailyBar
+        first bar starts at the previous day's start_hour+bar_sec, last bar ends at this day's last bar
+        before or equal end_hour
         """
-        self.repo = repo
+        ca = []
+        for c in col_arr :
+            if c == utcc :
+                ca.append(self._make_daily_utc(day, bar_sec))
+            else :
+                # all other numbers can be zero for missing
+                ca.append(np.zeros(self._get_totalbars(bar_sec)))
+        return np.array(ca).T
 
-    def get_daily(self, sday, eday  
+    def _scale(self,day,b,c,bs, tgt_cols, tgt_bs) :
+        utc0 = b[:, ci(c,utcc)]
+        utc1 = self._make_daily_utc(day, tgt_bs)
+
+        ix = np.searchsorted(utc0, utc1)
+        assert len(np.nonzero(utc0[ix]-utc1 != 0)[0]) == 0, 'problem scaling: utc mismatch on ' + day
+        nb = []
+        for c0 in tgt_cols :
+            assert c0 in c, 'column ' + col_name(c0) + ' not found in '+ col_name(c)
+            v0 = b[:, ci(c,c0)]
+            if c in [utcc, lttc] :
+                # needs to get the latest snap
+                np.append(v0[ix])
+            elif c in [lrc, volc, vbsc, lrhlc] :
+                # needs aggregate
+                v1=np.r_[0,np.cumsum(v0)[ix]]
+                np.append(v1[1:]-v1[:-1])
+            elif c in[vwapc] :
+                # needs aggregate in abs
+                # WHY???
+                v1=np.r_[0,np.cumsum(np.abs(v0))[ix]]
+                np.append(v1[1:]-v1[:-1])
+            elif c in [lpxc] :
+                # needs to get the latest snapshot, but fill
+                # in zero at begining and ending
+                import pandas as pd
+                lpx=v0
+                ix0=np.nonzero(lpx==0)[0]
+                if len(ix0) > 0 :
+                    lpx[ix0]=np.nan
+                    df=pd.DataFrame(lpx)
+                    df.fillna(method='ffill',inplace=True)
+                    df.fillna(method='bfill',inplace=True)
+                np.append(lpx.copy())
+            else :
+                raise ValueError('unknow col ' + str(c))
+
+        return np.array(nb).T
+
