@@ -167,7 +167,7 @@ def get_start_end_hour(venue) :
     except ICE, starts from 20 to 18
     To add other non cme/ice venues, such as IDX and FX venues
     """
-    if venue == ICE :
+    if venue == 'ICE' :
         return -4, 18
     return -6, 17
 ## At minimum, do not delete any of the definitions

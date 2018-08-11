@@ -1,6 +1,7 @@
 import numpy as np
 import l1
 import copy
+import os
 
 # This is the repository for storing
 # daily bars of all assets.  Each asset
@@ -107,7 +108,7 @@ class RepoDailyBar :
               }
         return idx
 
-    def __init__(self, symbol, repo_path='repo', bootstrap_idx=None, venue=None) :
+    def __init__(self, symbol, repo_path='repo', bootstrap_idx=None, venue=None, create=False) :
         """
         idx.npz stores global as well as daily configurations
         global:
@@ -132,9 +133,14 @@ class RepoDailyBar :
             np.savez_compressed(self.idxfn, idx=bootstrap_idx)
 
         try :
-            self.idx = np.load(self.path+'/idx.npz')['idx']
+            self.idx = np.load(self.path+'/idx.npz')['idx'].item()
         except :
-            raise ValueError('idx.npz not found from ' + self.path)
+            if create :
+                os.system('mkdir -p '+self.path)
+                self.idx=RepoDailyBar.make_bootstrap_idx(symbol)
+                np.savez_compressed(self.path+'/idx.npz',idx=self.idx)
+            else :
+                raise ValueError('idx.npz not found from ' + self.path)
 
         self.venue = self.idx['global']['venue']
         self.sh,self.eh = self.idx['global']['sehour']
@@ -145,7 +151,7 @@ class RepoDailyBar :
           bar_arr: list of daily bar, increasing in time stamp but may have holes
                    daily bar is a 2-d array shape [totbars, col]
           day_arr: list of trading days of each bar
-          col_arr: list of columns on each day
+          col_arr: list of columns on each day. The col_name's idx go with bar's column
           bar_sec: the raw bar second from hist/bar files
         return
           None
@@ -160,7 +166,7 @@ class RepoDailyBar :
         totbars = self._get_totalbars(bar_sec)
         for b, d, c in zip(bar_arr, day_arr, col_arr) :
             print 'update bar: ', d, ' bar_cnt: ', len(b), '/',totbars, ' ... ',
-            rb, col, bs = self._load_day(d)
+            rb, col, bs = self.load_day(d)
             if len(rb) == 0 :  # add all the columns
                 print ' a new day, add all col: ', c
                 if len(b) != totbars :
@@ -168,7 +174,7 @@ class RepoDailyBar :
                     continue
                 rb = b
                 bs = bar_sec
-                c = col
+                col = c
             else :             # add only new columns
                 print ' found ', len(rb), ' bars (', bs, 'S), col: ', col_name(col), 
                 if bs != bar_sec :
@@ -198,19 +204,21 @@ class RepoDailyBar :
         """
         This writes each of the bar to the repo, overwrite existing columns
         if exist, but leave other columns of existing day unchanged. 
-        optional rowix, if set is a two dimensional array, each for a day
+        optional rowix, if set, is a two dimensional array, each for a day
         about the specific rows to be updated.  Used for adding l1 data
-        where gaps are common
+        where gaps are common. elements of rowix can be none for all. 
         Note in case adding columns to existing bars, the rowix has to
         aggree with the totbars, just as update() above. 
         Refer to update()
         """
         totbars = self._get_totalbars(bar_sec)
         if rowix is None :
-            rowix = np.arange(totbars).tile((len(bar_arr), 1))
+            rowix = np.tile( np.arange(totbars), (len(bar_arr), 1))
         assert len(bar_arr) == len(rowix), 'len(bar_arr) != len(rowix)'
         for b, d, c, rix in zip(bar_arr, day_arr, col_arr, rowix) :
-            print 'overwrite bar: ', d, ' bar_cnt: ', len(b), '/', totbars ' ... ',
+            if rix is None :
+                rix = np.arange(totbars)
+            print 'overwrite bar: ', d, ' bar_cnt: ', len(b), '/', totbars, ' ... ',
             rb, col, bs = self.load_day(d)
             # just write that in
             if len(rb) != 0 :
@@ -224,13 +232,16 @@ class RepoDailyBar :
                 for i, c0 in enumerate(c) :
                     print i, ', ', col_name(c0), 
                     if c0 in col :
-                        print ' overwriting existing repo '
-                        rb[rix, ci(col, c0)] = b[:, i]
+                        if c0 == utcc :
+                            print 'cannot overwrite utc timestamp! skipping ...'
+                        else :
+                            print ' overwriting existing repo '
+                            rb[rix, ci(col, c0)] = b[:, i]
                         continue
                     else :
                         print 'adding to repo '
                         # but in this case, the rowix has to match totbars
-                        if len(rix) != totbarss :
+                        if len(rix) != totbars :
                             raise ValueError('rix not equal to totbars for adding column ' + str(len(rix)))
                         col.append(c0)
                         rb = np.r_[rb.T, [b[:, i]]].T
@@ -240,15 +251,20 @@ class RepoDailyBar :
                     raise ValueError('rix not equal to totbars for adding column ' + str(len(rix)))
                 col = c
                 rb = b
+                bs = bar_sec
 
             self._dump_day(d, rb, col, bs)
 
-    def get_daily_bar(self, start_day, day_cnt, bar_sec, end_day=None, cols=[utcc,lrc,volc,vbsc,lpxc], group_days = 5) :
+    def daily_bar(self, start_day, day_cnt, bar_sec, end_day=None, cols=[utcc,lrc,volc,vbsc,lpxc], group_days = 5) :
         """
-        return bars for specified period, with bar period
-        return index of multiday bar starting from
-        start_day, running for day_cnt
-        group_days: 1: daily, 5: weekly
+        return 3-d array of bars for specified period, with bar period, column, 
+        grouped by days (i.e.e daily, weekly, etc)
+        start_day: the first trading day to be returned
+        day_cnt :  number of trading days to be returned, can be None to use end_day
+        bar_sec :  bar period to be returned
+        end_day :  last trading day to be returned, can be None to use day_cnt
+        cols    :  columns to be returned
+        group_days: first dimension of the 3-d array, daily: 1, weekly=5, etc
         """
         if end_day is not None :
             print 'end_day not null, got ',
@@ -261,9 +277,10 @@ class RepoDailyBar :
                 day=ti.yyyymmdd()
         else :
             ti=l1.TradingDayIterator(start_day)
-            end_day = ti.next_n_trade_day(day_cnt)
+            ti.next_n_trade_day(day_cnt-1)
+            end_day = ti.yyyymmdd()
         print day_cnt, ' days from ', start_day, ' to ', end_day
-        assert day_cnt / group_days * group_days == day_cnt, 'Error! group_days ' + str(group_days) + ' not multiple of ', str(day_cnt)
+        assert day_cnt / group_days * group_days == day_cnt, 'Error! group_days ' + str(group_days) + ' not multiple of ' + str(day_cnt)
 
         ti=l1.TradingDayIterator(start_day)
         day=ti.yyyymmdd()
@@ -272,17 +289,22 @@ class RepoDailyBar :
             print "reading ", day, 
             b, c, bs = self.load_day(day)
             if len(b) == 0 :
-                print "missing, filling zeros"
-                bar.append(self._fill_daily_bar_col(day,bar_sec,c))
+                print " missing, filling zeros"
+                bar.append(self._fill_daily_bar_col(day,bar_sec,cols))
             else :
-                bar.append(self._scale(b, c, bs, cols, bar_sec))
-                print "scale bar_sec from ", bs, " to ", bar_sec
+                bar.append(self._scale(day, b, c, bs, cols, bar_sec))
+                print " scale bar_sec from ", bs, " to ", bar_sec
             ti.next()
             day=ti.yyyymmdd()
 
-        bar = np.array(bar)
-        if group_days > 1 :
-            bar.reshape((bar.shape[0]/group_days, bar.shape[1]*group_days, bar.shape[2]))
+        bar = np.vstack(bar)
+        # process missing days if any
+        for c in [lpxc, cols] :
+            if c in cols :
+               self._fill_last(bar[:, ci(cols,c)])
+
+        d1 = day_cnt / group_days
+        bar = bar.reshape((d1, bar.shape[0]/d1, bar.shape[1]))
         return bar
 
     def load_day(self, day) :
@@ -295,15 +317,17 @@ class RepoDailyBar :
         bs = 0
         if day in self.idx['daily'].keys() :
             bs = self.idx['daily'][day]['bar_sec']
-            col= copy.deepcopy(self.idx['daily'][day]['cols'])
+            col= list(copy.deepcopy(self.idx['daily'][day]['cols']))
             try :
                 bfn = self.path+'/daily/'+day+'/bar.npz'
                 bar = np.load(bfn)['bar']
             except :
                 raise ValueError(bfn+' not found but is in the repo index')
+        else :
+            return [], [], 0
 
-        assert self._get_totalbars(bs) == len(bar), bfn + ' wrong size: '+str(len(bar)) + ' should  be  ' + str(self._get_totalbars(bs)))
-        return bar, bol, bs
+        assert self._get_totalbars(bs) == len(bar), bfn + ' wrong size: '+str(len(bar)) + ' should  be  ' + str(self._get_totalbars(bs))
+        return bar, col, bs
 
     def _dump_day(self, day, bar, col, bar_sec) :
         """
@@ -313,6 +337,7 @@ class RepoDailyBar :
         assert self._get_totalbars(bar_sec) == len(bar), bfn + ' wrong size: '+str(len(bar)) + ' should be ' + str(self._get_totalbars(bar_sec)) 
         self.idx['daily'][day] = {'bar_sec':bar_sec, 'cols':copy.deepcopy(col)}
         bfn = self.path+'/daily/'+day+'/bar.npz'
+        os.system('mkdir -p ' + self.path+'/daily/'+day)
         np.savez_compressed(bfn, bar=bar)
         np.savez_compressed(self.idxfn, idx=self.idx)
 
@@ -321,7 +346,7 @@ class RepoDailyBar :
 
     def _make_daily_utc(self, day, bar_sec) :
         totbar = self._get_totalbars(bar_sec)
-        u1 = int(l1.TradingDayIterator.local_ymd_to_utc(day))+self.end_hour*3600
+        u1 = int(l1.TradingDayIterator.local_ymd_to_utc(day))+self.eh*3600
         u0 = u1 - totbar*bar_sec + bar_sec
         return np.arange(u0, u1+bar_sec, bar_sec)
  
@@ -331,12 +356,16 @@ class RepoDailyBar :
         before or equal end_hour
         """
         ca = []
+        tb = self._get_totalbars(bar_sec)
         for c in col_arr :
             if c == utcc :
                 ca.append(self._make_daily_utc(day, bar_sec))
+            elif c in [lttc, lpxc] :
+                # fill in nan, process it later
+                ca.append(np.array( [np.nan]*tb ))
             else :
                 # all other numbers can be zero for missing
-                ca.append(np.zeros(self._get_totalbars(bar_sec)))
+                ca.append(np.array( [  0   ]*tb ))
         return np.array(ca).T
 
     def _scale(self,day,b,c,bs, tgt_cols, tgt_bs) :
@@ -347,21 +376,25 @@ class RepoDailyBar :
         assert len(np.nonzero(utc0[ix]-utc1 != 0)[0]) == 0, 'problem scaling: utc mismatch on ' + day
         nb = []
         for c0 in tgt_cols :
-            assert c0 in c, 'column ' + col_name(c0) + ' not found in '+ col_name(c)
+            assert c0 in c, 'column ' + col_name(c0) + ' not found in '+ str(col_name(c))
             v0 = b[:, ci(c,c0)]
-            if c in [utcc, lttc] :
+            if c0 in [utcc, lttc, lpxc] :
                 # needs to get the latest snap
-                np.append(v0[ix])
-            elif c in [lrc, volc, vbsc, lrhlc] :
+                nb.append(v0[ix])
+            elif c0 in [lrc, volc, vbsc, lrhlc] :
                 # needs aggregate
                 v1=np.r_[0,np.cumsum(v0)[ix]]
-                np.append(v1[1:]-v1[:-1])
-            elif c in[vwapc] :
+                nb.append(v1[1:]-v1[:-1])
+            elif c0 in[vwapc] :
                 # needs aggregate in abs
                 # WHY???
                 v1=np.r_[0,np.cumsum(np.abs(v0))[ix]]
-                np.append(v1[1:]-v1[:-1])
-            elif c in [lpxc] :
+                nb.append(v1[1:]-v1[:-1])
+                """
+                # this is handled at daily_bar to get multi-day fillna
+                # for missing days
+                # intra-day nan has been handled by IB_bar.py's write_daily_bar
+            elif c0 in [lpxc] :
                 # needs to get the latest snapshot, but fill
                 # in zero at begining and ending
                 import pandas as pd
@@ -372,9 +405,20 @@ class RepoDailyBar :
                     df=pd.DataFrame(lpx)
                     df.fillna(method='ffill',inplace=True)
                     df.fillna(method='bfill',inplace=True)
-                np.append(lpx.copy())
+                nb.append(lpx.copy())
+                """
             else :
-                raise ValueError('unknow col ' + str(c))
+                raise ValueError('unknow col ' + str(c0))
 
         return np.array(nb).T
 
+    def _fill_last(self, v) :
+        """
+        fill nan in v with the previous number, fill the initial nan with
+        the subsequent number. 
+        Used for ltt and lpx
+        """
+        import pandas as pd 
+        df=pd.DataFrame(v)
+        df.fillna(method='ffill',inplace=True)
+        df.fillna(method='bfill',inplace=True)
