@@ -68,13 +68,27 @@ class TradingDayIterator :
     def local_ymd_to_utc(ymd,h_ofst=0,m_ofst=0,s_ofst=0) :
         """
         this returns the utc of 0 o'clock local time at ymd, w.r.t to the offset specified 
-        at h/m/s offset
+        at h/m/s offset On a unix, it could simply be
+
+            dt = strptime(ymdhms)
+            float(dt.strftime('%s')
+
+        But on a windows system, python won't give correct utc.  This requires a platform
+        independant way of getting utc from a local time stamp
+
+        This requires the python's datetime being right on strptime to adjust DST. 
+        However, strptime adjusts DST on 6am of a DST Sunday, instead of a 2am. 
+        Bug fixing: on a Sunday of DST change, the timestamp is not accurate around
+        that Sunday's 2am to 6am.  TODO: fix that issue as a low priority. 
         """
-        dt=datetime.datetime.strptime(ymd,'%Y%m%d')
+        ymdhms = '%s%02d%02d%02d'%(ymd, h_ofst, m_ofst,s_ofst)
+        #dt=datetime.datetime.strptime(ymd,'%Y%m%d')
+        dt=datetime.datetime.strptime(ymdhms,'%Y%m%d%H%M%S') # this should adjust DST
         utc0=(dt-datetime.datetime(1970,1,1)).total_seconds()
         dt0=datetime.datetime.fromtimestamp(utc0)
         local_offset=(dt-dt0).total_seconds()
-        utc0=utc0+local_offset+h_ofst*3600+m_ofst*60+s_ofst
+        #utc0=utc0+local_offset+h_ofst*3600+m_ofst*60+s_ofst
+        utc0=utc0+local_offset
         return utc0
 
     @staticmethod

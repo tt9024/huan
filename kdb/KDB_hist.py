@@ -5,6 +5,7 @@ import pdb
 import glob
 import l1
 import repo_dbar as repo
+import os
 
 def bar_by_file(fn, skip_header=5) :
     bar_raw=np.genfromtxt(fn,delimiter=',',usecols=[0,2,3,4,5,6,7,9,10,11,12], skip_header=skip_header,dtype=[('day','|S12'),('bar_start','|S14'),('last_trade','|S14'),('open','<f8'),('high','<f8'),('low','<f8'),('close','<f8'),('vwap','<f8'),('volume','i8'),('bvol','i8'),('svol','i8')])
@@ -17,6 +18,7 @@ def bar_by_file(fn, skip_header=5) :
 
         bar0=[utc, utc_lt, b['open'],b['high'],b['low'],b['close'],b['vwap'],b['volume'],b['bvol'],b['svol']]
         bar.append(bar0)
+
     bar = np.array(bar)
     open_px_col=2
     ix=np.nonzero(np.isfinite(bar[:,open_px_col]))[0]
@@ -27,7 +29,7 @@ def bar_by_file(fn, skip_header=5) :
 def write_daily_bar(symbol,bar,bar_sec=5) :
     import pandas as pd
     start_hour, end_hour = l1.get_start_end_hour(l1.venue_by_symbol(symbol))
-    TRADING_HOURS=end_hours-start_hour
+    TRADING_HOURS=end_hour-start_hour
     start_hour = start_hour % 24
 
     dt0=datetime.datetime.fromtimestamp(bar[0,0])
@@ -176,9 +178,9 @@ def write_daily_bar(symbol,bar,bar_sec=5) :
 
     return barr, trade_days, col_arr
 
-def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5) :
+def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path='.') :
     year =  str(year)  # expects a string
-    fn=glob.glob(symbol+'/'+symbol+'*_[12]*.csv*')
+    fn=glob.glob(kdb_hist_path + '/' + symbol+'/'+symbol+'??_[12]*.csv*')
 
     ds=[]
     de=[]
@@ -219,21 +221,21 @@ def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5) :
             f = f[:-3]
         print 'reading bar file ',f
         b=bar_by_file(f)
-        ba, td, col = write_daily_bar(symbol b,bar_sec=bar_sec)
+        ba, td, col = write_daily_bar(symbol,b,bar_sec=bar_sec)
         bar_lr += ba  # appending daily bars
         td_arr += td
         col_arr += col
 
     return bar_lr, td_arr, col_arr
 
-def gen_bar(symbol, year_s=1998, year_e=2018, check_only=False, repo=None) :
+def gen_bar(symbol, year_s=1998, year_e=2018, check_only=False, repo=None, kdb_hist_path = '/cygdrive/e/kdb') :
     ba=[]
     td=[]
     col=[]
     years=np.arange(year_s, year_e+1)
     for y in years :
         try :
-            barlr, td_arr, col_arr=gen_bar0(symbol,str(y),check_only=check_only)
+            barlr, td_arr, col_arr=gen_bar0(symbol,str(y),check_only=check_only, kdb_hist_path = kdb_hist_path)
             if len(barlr) > 0 :
                 ba+=barlr
                 td+=td_arr
