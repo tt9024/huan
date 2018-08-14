@@ -197,6 +197,8 @@ def write_daily_bar(symbol, bar,bar_sec=5,last_close_px=None) :
         day=day1
 
     return barr, trade_days, col_arr, bad_trade_days
+
+def bar_by_file_ib(fn,bid_ask_spd,bar_qt=None,bar_trd=None) :
     """ 
     _qt.csv and _trd.csv are expected to exist for the given fn
     """
