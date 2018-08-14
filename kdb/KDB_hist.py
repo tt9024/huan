@@ -26,7 +26,7 @@ def bar_by_file(fn, skip_header=5) :
     ix=np.argsort(bar[:, 0])
     return bar[ix, :]
 
-def write_daily_bar(symbol,bar,bar_sec=5) :
+def write_daily_bar(symbol,bar,bar_sec=5,old_cl_repo=None) :
     import pandas as pd
     start_hour, end_hour = l1.get_start_end_hour(l1.venue_by_symbol(symbol))
     TRADING_HOURS=end_hour-start_hour
@@ -88,7 +88,27 @@ def write_daily_bar(symbol,bar,bar_sec=5) :
         print 'getting bar ', day+'-'+str(start_hour), day1+'-'+str(end_hour),' , got ', j-i, 'bars'
         # start to construct bar
         if j<=i :
-            print ' NO bars found, skipping'
+            print ' NO bars found ',
+            if old_cl_repo is not None :
+                # a hack to fix the missing CLZ contracts, somehow lost in the copy
+                # just another proof how crappy it could be... The new Repo system
+                # will fix it. 
+
+                y = int(day1[:4]) - 1998
+                old_cl_bar = old_cl_repo[y]
+                i=np.searchsorted(old_cl_bar[:, 0], float(utc_s+bar_sec)-1e-6)
+                j=np.searchsorted(old_cl_bar[:, 0], float(utc_e)-1e-6)
+                if j - i + 1 == len(bar_utc) :
+                    barr.append(old_cl_bar[i:j+1, :])
+                    last_close_px=old_cl_bar[j, -1]  #lpx is the last column *hecky*
+                    trade_days.append(day1)
+                    col_arr.append(repo.kdb_ib_col)
+                    print 'get from old_cl_repo '
+                else :
+                    print 'cannot find ', utc_s, ' to ', utc_e, ' from the old_cl_repo, skipping'
+            else :
+                print ' skipping'
+
         else :
             bar_arr=[]
             bar_arr.append(bar_utc.astype(float))
@@ -178,7 +198,7 @@ def write_daily_bar(symbol,bar,bar_sec=5) :
 
     return barr, trade_days, col_arr
 
-def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path='.') :
+def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path='.', old_cl_repo = None) :
     year =  str(year)  # expects a string
     fn=glob.glob(kdb_hist_path + '/' + symbol+'/'+symbol+'??_[12]*.csv*')
 
@@ -217,25 +237,29 @@ def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path
     for f in fn :
         if f[-3:]=='.gz' :
             print 'gunzip ', f
-            os.system('gunzip '+f)
-            f = f[:-3]
+            try :
+                os.system('gunzip '+f)
+                f = f[:-3]
+            except :
+                print 'problem gunzip ', f, ' skipping'
+                continue
         print 'reading bar file ',f
         b=bar_by_file(f)
-        ba, td, col = write_daily_bar(symbol,b,bar_sec=bar_sec)
+        ba, td, col = write_daily_bar(symbol,b,bar_sec=bar_sec, old_cl_repo=old_cl_repo)
         bar_lr += ba  # appending daily bars
         td_arr += td
         col_arr += col
 
     return bar_lr, td_arr, col_arr
 
-def gen_bar(symbol, year_s=1998, year_e=2018, check_only=False, repo=None, kdb_hist_path = '/cygdrive/e/kdb') :
+def gen_bar(symbol, year_s=1998, year_e=2018, check_only=False, repo=None, kdb_hist_path = '/cygdrive/e/kdb', old_cl_repo = None) :
     ba=[]
     td=[]
     col=[]
     years=np.arange(year_s, year_e+1)
     for y in years :
         try :
-            barlr, td_arr, col_arr=gen_bar0(symbol,str(y),check_only=check_only, kdb_hist_path = kdb_hist_path)
+            barlr, td_arr, col_arr=gen_bar0(symbol,str(y),check_only=check_only, kdb_hist_path = kdb_hist_path, old_cl_repo=old_cl_repo)
             if len(barlr) > 0 :
                 ba+=barlr
                 td+=td_arr
@@ -251,3 +275,36 @@ def gen_bar(symbol, year_s=1998, year_e=2018, check_only=False, repo=None, kdb_h
         repo.update(ba, td, col)
     return ba, td, col
 
+def fix_days_from_old_cl_repo(td, sday, eday, old_cl_repo) :
+
+    ti = l1.TradingDayIterator(sday)
+    day1 = ti.yyyymmdd()
+    barr = []
+    tda = []
+    col = []
+
+    TRADING_HOURS = 23
+    end_hour = 17
+    bar_sec = 5
+
+    while day1 <=eday :
+        if day1 not in td :
+            print "read ", day1, " from olc_cl_repo"
+            utc_e = int(l1.TradingDayIterator.local_ymd_to_utc(day1, end_hour,0,0))
+            utc_s = utc_e - TRADING_HOURS*3600
+            y = int(day1[:4]) - 1998
+            old_cl_bar = old_cl_repo[y]
+            i=np.searchsorted(old_cl_bar[:, 0], float(utc_s+bar_sec)-1e-6)
+            j=np.searchsorted(old_cl_bar[:, 0], float(utc_e)-1e-6)
+            N = (utc_e-utc_s)/bar_sec
+            if j - i + 1 == N :
+                barr.append(old_cl_bar[i:j+1, :])
+                tda.append(day1)
+                col.append(repo.kdb_ib_col)
+                print 'get from old_cl_repo '
+            else :
+                print 'cannot find ', utc_s, ' to ', utc_e, ' from the old_cl_repo, skipping'
+
+        ti.next()
+        day1=ti.yyyymmdd()
+    return barr, tda, col

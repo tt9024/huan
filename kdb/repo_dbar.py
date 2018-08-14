@@ -337,6 +337,14 @@ class RepoDailyBar :
         assert self._get_totalbars(bar_sec) == len(bar), bfn + ' wrong size: '+str(len(bar)) + ' should be ' + str(self._get_totalbars(bar_sec)) 
         self.idx['daily'][day] = {'bar_sec':bar_sec, 'cols':copy.deepcopy(col)}
         bfn = self.path+'/daily/'+day+'/bar.npz'
+        # check for existance of self.path in case the
+        # program is not run under correct directory
+        try :
+            st = os.stat(self.idxfn)
+        except :
+            print 'running at a wrong directory? ', self.idxfn, ' not found!'
+            raise ValueError('file not found')
+
         os.system('mkdir -p ' + self.path+'/daily/'+day)
         np.savez_compressed(bfn, bar=bar)
         np.savez_compressed(self.idxfn, idx=self.idx)
