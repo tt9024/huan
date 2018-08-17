@@ -20,7 +20,7 @@ import repo_dbar as repo
 # * allow gzip of csv
 # This should be the on-going, as the KDB bars be in repo for once and for all
 
-def write_daily_bar(symbol, bar,bar_sec=5,last_close_px=None) :
+def write_daily_bar(symbol, bar,bar_sec=5,last_close_px=None, fill_missing=False) :
     """
     bar: all bars from a hist file having the format of 
     [utc, utc_ltt, open_px, hi_px, lo_px, close_px, vwap, vol, vb, vs]
@@ -33,6 +33,8 @@ def write_daily_bar(symbol, bar,bar_sec=5,last_close_px=None) :
     However, it can handle 24 hour trading, i.e. start/end at 18:00, for fx venues.
     Note 2, the first bar of a day should be 1 bar_sec after the starting utc and
     the last bar of a day should be at the ending utc.
+
+    if fill_missing is set to true, such as a half day, then do zero filling
 
     Output: 
     array of daily_bar for each day covered in the bar (hist file)
@@ -99,19 +101,40 @@ def write_daily_bar(symbol, bar,bar_sec=5,last_close_px=None) :
         j=np.searchsorted(bar[:, 0], float(utc_e)-1e-6)
         bar0=bar[i:j,:]  # take the bars in between the first occurance of start_hour (or after) and the last occurance of end_hour or before
 
-        N = (utc_e-utc_s)/bar_sec  # but we still fill in each bar, so N should be fixed for a given symbol/venue pair
-        ix_utc=((bar0[:,0]-float(utc_s))/bar_sec+1e-9).astype(int) # lr(close_px-open_px) of a bar0 has bar_utc
-        bar_utc=np.arange(utc_s+bar_sec, utc_e+bar_sec, bar_sec) # bar time will be time of close price, as if in prod
-       
         print 'getting bar ', day+'-'+str(start_hour)+':00', day1+'-'+str(end_hour)+':00', ' , got ', j-i, 'bars'
-        
-        if N != j-i :
+        N = (utc_e-utc_s)/bar_sec  # but we still fill in each bar, so N should be fixed for a given symbol/venue pair
+
+        if N != j-i and not fill_missing:
             print 'bad day, need to retrieve the hist file again!'
             if day1 not in bad_trade_days :
                 bad_trade_days.append(day1)
         elif day1 in trade_days :
             print 'trade day ', day1, ' already in, skipping'
         else :
+            ix_utc=((bar0[:,0]-float(utc_s))/bar_sec+1e-9).astype(int) # lr(close_px-open_px) of a bar0 has bar_utc
+            bar_utc=np.arange(utc_s+bar_sec, utc_e+bar_sec, bar_sec) # bar time will be time of close price, as if in prod
+
+            if N != j-i :
+                print 'fill missing for only ', j-i, ' bars (should be ', N, ')'
+                bar1 = np.empty((N,bar0.shape[1]))
+                bar1[:,0] = np.arange(utc_s, utc_e, bar_sec)
+                # filling all missing for [utc, utc_ltt, open_px, hi_px, lo_px, close_px, vwap, vol, vb, vs]
+                # fillforward for utc_ltt, close_px, vwap
+                for col in [1, 5, 6] :
+                    bar1[:, col] = np.nan
+                    bar1[ix_utc, col] = bar0[:, col]
+                    df=pd.DataFrame(bar1[:, col])
+                    df.fillna(method='ffill',inplace=True)
+                    df.fillna(method='bfill',inplace=True)
+                # fill zero for vol, vb, bs
+                for col in [7,8,9] :
+                    bar1[:,col] = 0
+                    bar1[ix_utc,col] = bar0[:, col]
+                # copy value of close_px for open_px, hi_px, lo_px
+                for col in [2,3,4] :
+                    bar1[:, col] = bar1[:, 5]
+                    bar1[ix_utc,col] = bar0[:, col]
+
             bar_arr=[]
             bar_arr.append(bar_utc.astype(float))
 
@@ -205,7 +228,8 @@ def bar_by_file_ib(fn,bid_ask_spd,bar_qt=None,bar_trd=None) :
 
     if fn[-3:] == '.gz' :
         fn = fn[:-3]
-    fn = fn[:-7]
+    if fn[-4:] == '.csv' :
+        fn = fn[:-7]
     fnqt=fn+'_qt.csv'
     fntd=fn+'_trd.csv'
     print 'readig ', fn
@@ -299,8 +323,14 @@ def get_future_spread(symbol) :
     return l1.SymbolTicks[symbol]
 
 
-def fn_from_dates(symbol, sday, eday) :
-    fqt=glob.glob('hist/'+symbol+'/'+symbol+'*_[12]*_qt.csv*')
+def fn_from_dates(symbol, sday, eday, is_front_future, is_fx) :
+    if is_fx :
+        fqt=glob.glob('hist/FX/'+symbol+'_[12]*_qt.csv*')
+    else :
+        if is_front_future :
+            fqt=glob.glob('hist/'+symbol+'/'+symbol+'*_[12]*_qt.csv*')
+        else :
+            fqt=glob.glob('hist/'+symbol+'/'+symbol+'/nc/*_[12]*_qt.csv*')
     ds=[]
     de=[]
     fn=[]
@@ -336,12 +366,12 @@ def fn_from_dates(symbol, sday, eday) :
         fns = np.delete(fns, ix+1)
     return fns
 
-def gen_daily_bar_ib(symbol, sday, eday, bar_sec, check_only=False, repo=None) :
+def gen_daily_bar_ib(symbol, sday, eday, bar_sec, check_only=False, dbar_repo=None, is_front_future=True, is_fx = False) :
     """
     generate IB dily bars from sday to eday.
     It is intended to be used to add too the daily bar repo manually
     """
-    fn = fn_from_dates(symbol, sday, eday)
+    fn = fn_from_dates(symbol, sday, eday, is_front_future, is_fx)
     spread = get_future_spread(symbol)
     print 'Got ', len(fn), ' files: ', fn, ' spread: ', spread
 
@@ -360,11 +390,25 @@ def gen_daily_bar_ib(symbol, sday, eday, bar_sec, check_only=False, repo=None) :
         cola+=col
         tda_bad+=bad_days
 
-    if repo is not None :
-        repo.update(baa, tda, cola)
+    if dbar_repo is not None :
+        dbar_repo.update(baa, tda, cola)
 
     tda_bad = list(set(tda_bad))
     tda_bad.sort()
+
+    print 'Done!'
+
+    if dbar_repo is not None :
+        print 'getting the missing days ', tda_bad
+        import ibbar
+        reload(ibbar)
+        fn = ibbar.get_missing_day(symbol, tda_bad, bar_sec, is_front_future, is_fx)
+        for f in fn :
+            _,_,b=bar_by_file_ib(f,spread)
+            ba, td, col, bad_days = write_daily_bar(symbol, b,bar_sec=bar_sec,fill_missing=True)
+            if len(ba) > 0 :
+                dbar_repo.update(ba, td, col)
+
     return baa, tda, cola, tda_bad
 
 """

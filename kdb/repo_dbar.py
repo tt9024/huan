@@ -107,8 +107,8 @@ class RepoDailyBar :
                           }\
               }
         return idx
-
-    def __init__(self, symbol, repo_path='repo', bootstrap_idx=None, venue=None, create=False) :
+        
+    def __init__(self, symbol, repo_path='/cygdrive/e/research/kdb/repo', bootstrap_idx=None, venue=None, create=False) :
         """
         idx.npz stores global as well as daily configurations
         global:
