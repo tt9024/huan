@@ -117,7 +117,7 @@ HGMonthlyFrontContract =  ['H','H','K','K','N','N','U','U','Z','Z','Z','H']
 #HGMonthlyFrontContract =  ['H','H','H','K','K','N','N','U','U','Z','Z','Z']
 QuartlyFrontContract =    ['H','H','H','M','M','M','U','U','U','Z','Z','Z']
 OddMonthlyFrontContract = ['H','H','K','K','N','N','U','U','Z','Z','Z','H']
-RollDates = {'CL':  [MonthlyFrontContract,   [17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17]], \
+RollDates = {'CL':  [MonthlyFrontContract,   [16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16]], \
              'LCO': [MonthlyFrontContract,   [12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12]], \
              'LFU': [MonthlyFrontContract,   [12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12]], \
              'LOU': [MonthlyFrontContract,   [12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12]], \
