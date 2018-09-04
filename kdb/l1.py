@@ -117,6 +117,17 @@ HGMonthlyFrontContract =  ['H','H','K','K','N','N','U','U','Z','Z','Z','H']
 #HGMonthlyFrontContract =  ['H','H','H','K','K','N','N','U','U','Z','Z','Z']
 QuartlyFrontContract =    ['H','H','H','M','M','M','U','U','U','Z','Z','Z']
 OddMonthlyFrontContract = ['H','H','K','K','N','N','U','U','Z','Z','Z','H']
+SoybeanFrontContract =    ['H','H','K','K','N','N','X','X','X','X','F','F']
+SoybeanMealFrontContract= ['H','H','K','K','N','N','Z','Z','Z','Z','Z','F']
+LeanhogFrontContract =    ['G','J','J','M','M','N','Q','V','V','Z','Z','G']
+LivecattleFrontContract = ['G','J','J','M','M','Q','Q','V','V','Z','Z','G']
+PalladiumFrontContract =  ['H','H','M','M','M','U','U','U','Z','Z','Z','H']
+EurodollarFrontContract = ['H','M','M','M','M','M','U','U','U','Z','Z','Z']
+CocoaFrontContract =      ['H','H','K','K','N','N','U','Z','Z','Z','Z','H']
+Cotton2FrontContract =    ['H','H','K','K','N','N','Z','Z','Z','Z','Z','H']
+Suggar11FrontContract =   ['H','H','K','K','N','N','V','V','V','H','H','H']
+CoffeeFrontContract =     ['H','H','K','K','N','N','U','U','Z','Z','Z','H']
+
 RollDates = {'CL':  [MonthlyFrontContract,   [16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16]], \
              'LCO': [MonthlyFrontContract,   [12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12]], \
              'LFU': [MonthlyFrontContract,   [12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12]], \
@@ -143,7 +154,19 @@ RollDates = {'CL':  [MonthlyFrontContract,   [16, 16, 16, 16, 16, 16, 16, 16, 16
              'HG': [HGMonthlyFrontContract,  [31, 25, 31, 25, 31, 27, 31, 29, 31, 31, 29, 31]], 
              'SI': [HGMonthlyFrontContract,  [31, 25, 31, 25, 31, 27, 31, 29, 31, 31, 29, 31]], 
              'ZC': [OddMonthlyFrontContract, [31, 20, 31, 20, 31, 20, 31, 20, 31, 31, 20, 31]],  # I am not sure about this \
-             'FX': [QuartlyFrontContract,    [31, 31, 13, 31, 31, 13, 31, 31, 13, 31, 31, 13]]}  # this may change
+             'FX': [QuartlyFrontContract,    [31, 31, 13, 31, 31, 13, 31, 31, 13, 31, 31, 13]],  # this may change
+             'ZW': [OddMonthlyFrontContract, [31, 16, 31, 13, 31, 15, 31, 10, 31, 31, 17, 31]],  # CME Wheat
+             'ZS': [SoybeanFrontContract,    [31, 23, 31, 13, 31, 22, 31, 31, 31, 20, 31, 15]],  # CME soybean
+             'ZM': [SoybeanMealFrontContract,[31, 16, 31, 13, 31, 20, 31, 31, 31, 31, 17, 11]],  # CME soybean meal
+             'ZL': [SoybeanMealFrontContract,[31, 16, 31, 13, 31, 20, 31, 31, 31, 31, 17, 15]],  # CME soybean oil
+             'HE': [LeanhogFrontContract,    [17, 31, 16, 31, 21, 15, 11, 31, 18, 31, 17, 31]],  # CME LeanHog
+             'LE': [LivecattleFrontContract, [12, 31, 16, 31, 16, 31, 11, 31, 20, 31, 12, 31]],  # CME Live Cattle
+             'PA': [PalladiumFrontContract,  [31, 23, 31, 31, 27, 31, 31, 27, 31, 31, 24, 31]],  # CME Palladium
+             'GE': [EurodollarFrontContract, [26, 31, 31, 31, 31, 11, 31, 31, 11, 31, 31, 11]],  # CME EuroDollar
+             'CC': [CocoaFrontContract,      [31,  5, 31,  6, 31,  4, 31, 31, 31, 31,  6, 31]],  # ICE Cocoa
+             'CT': [Cotton2FrontContract,    [31, 11, 31, 11, 31, 11, 31, 31, 31, 31, 13, 31]],  # ICE Cotton 2
+             'SB': [Suggar11FrontContract,   [31, 12, 31, 12, 31, 12, 31, 31, 16, 31, 31, 31]],  # ICE Sugar 11
+             'KC': [CoffeeFrontContract,     [31, 11, 31, 12, 31, 11, 31, 10, 31, 31, 12, 31]]}  # ICE Coffee
 
 FXFutures = ['6A','6B','6C','6E','6J','6M','6N','6Z','6R','AD','BP','CD','URO','JY','MP','NE']
 RicMap = {'6A':'AD', '6B':'BP', '6C':'CD', '6E':'URO', '6J':'JY', '6M':'MP', '6N':'NE','ZC':'C'}
@@ -156,17 +179,19 @@ SymbolTicks = {'CL':0.01, 'ES':0.25, 'NG':0.001, 'LCO':0.01, 'LFU':0.25, 'LOU':0
 ## venue_by_symbol definitions as ibbar uses it for live trading
 ## At minimum, do not delete any of the definitions
 ## Adding should not be a problem
-ven_sym_map={'NYM':['CL','NG','HO','RB','GC','SI','HG'], \
-             'CME':['ES','6A','6C','6E','6B','6J','6N','6R','6Z','6M'],\
-             'CBT':['ZB','ZN','ZF','ZC'],\
+ven_sym_map={'NYM':['CL','NG','HO','RB','GC','SI','HG','PA'], \
+             'CME':['ES','6A','6C','6E','6B','6J','6N','6R','6Z','6M','HE','LE','GE'],\
+             'CBT':['ZB','ZN','ZF','ZC','ZS','ZL','ZM','ZW'],\
              'EUX':['FDX','STXE','FGBX','FGBL','FGBS','FGBM'],\
              'FX' :['AUD.CAD','AUD.JPY','AUD.NZD','CAD.JPY','EUR.AUD',\
                     'EUR.CAD','EUR.CHF','EUR.GBP','EUR.JPY','EUR.NOK',\
                     'EUR.SEK','EUR.TRY','EUR.ZAR','GBP.CHF','GBP.JPY',\
                     'NOK.SEK','NZD.JPY','EUR.USD','USD.ZAR','USD.TRY',\
                     'USD.MXN','USD.CNH','XAU.USD','XAG.USD'],\
+             'ETF':['EEM','EPI','EWJ','EWZ','EZU','FXI','GDX','ITB','KRE','QQQ','RSX','SPY','UGAZ','USO','VEA','VXX','XLE','XLF','XLK','XLU','XOP'],\
              'ICE':['LCO','LFU','LOU']};
 
+ICEFutures = ven_sym_map['ICE']
 future_venues=['NYM','CME','CBT','EUX','ICE']
 fx_venues=['FX']
 def venue_by_symbol(symbol) :

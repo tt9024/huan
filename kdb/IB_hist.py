@@ -391,7 +391,7 @@ def gen_daily_bar_ib(symbol, sday, eday, bar_sec, check_only=False, dbar_repo=No
         tda_bad+=bad_days
 
     if dbar_repo is not None :
-        dbar_repo.update(baa, tda, cola)
+        dbar_repo.update(baa, tda, cola, bar_sec)
 
     tda_bad = list(set(tda_bad))
     tda_bad.sort()
@@ -407,9 +407,17 @@ def gen_daily_bar_ib(symbol, sday, eday, bar_sec, check_only=False, dbar_repo=No
             _,_,b=bar_by_file_ib(f,spread)
             ba, td, col, bad_days = write_daily_bar(symbol, b,bar_sec=bar_sec,fill_missing=True)
             if len(ba) > 0 :
-                dbar_repo.update(ba, td, col)
+                dbar_repo.update(ba, td, col, bar_sec)
 
     return baa, tda, cola, tda_bad
+
+
+def l1_bar(symbol, bar_path) :
+    b = np.genfromtxt(bar_path, delimiter=',', use_cols=[0,1,2,3,4,5,6])
+    # I need to get the row idx for each day for the columes of vbs and ism
+    # which one is better?
+    # I could use hist's trade for model, and l1/tick for execution
+    pass
 
 """
 def gen_bar(symbol, year_s=1998, year_e=2018, check_only=False, ext_fields=True) :
