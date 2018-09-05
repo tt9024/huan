@@ -189,26 +189,34 @@ ven_sym_map={'NYM':['CL','NG','HO','RB','GC','SI','HG','PA'], \
                     'NOK.SEK','NZD.JPY','EUR.USD','USD.ZAR','USD.TRY',\
                     'USD.MXN','USD.CNH','XAU.USD','XAG.USD'],\
              'ETF':['EEM','EPI','EWJ','EWZ','EZU','FXI','GDX','ITB','KRE','QQQ','RSX','SPY','UGAZ','USO','VEA','VXX','XLE','XLF','XLK','XLU','XOP'],\
-             'ICE':['LCO','LFU','LOU']};
+             'ICE':['LCO','LFU','LOU'], \
+             'NYBOT':['CC','CT','SB','KC']};
 
 ICEFutures = ven_sym_map['ICE']
-future_venues=['NYM','CME','CBT','EUX','ICE']
+future_venues=['NYM','CME','CBT','EUX','ICE','NYBOT']
 fx_venues=['FX']
+
+HoursDefines={'CMEAgriHours':[-4, 15], 'CMELiveStockHours':[9, 15], 'ICEHours':[-4, 18], 'CocoaHours':[4,14], 'CottonHours':[-3, 15], 'SugarHours':[3,13]}
+start_stop_hours_symbol={'CMEAgriHours': ['ZC','ZW','ZS','ZM','ZL'], 'CMELiveStockHours': ['HE', 'LE'], 'ICEHours':['LCO','LFU','LOU'], 'CocoaHours':['CC','KC'], 'CottonHours':['CT'], 'SugarHours':['SB'], }
 def venue_by_symbol(symbol) :
     for k,v in ven_sym_map.items() :
         if symbol in v :
             return k
     raise ValueError('venue not found for ' + symbol)
 
-def get_start_end_hour(venue) :
+def get_start_end_hour(symbol) :
     """
-    start on previous day's 18, end on 17, 
+    start on previous day's 18, end on 17,
     except ICE, starts from 20 to 18
     To add other non cme/ice venues, such as IDX and FX venues
     """
-    if venue == 'ICE' :
-        return -4, 18
+    for h in start_stop_hours_symbol.keys() :
+        if symbol in start_stop_hours_symbol[h]:
+            return HoursDefines[h]
+
+    #default Future and FX hours
     return -6, 17
+
 ## At minimum, do not delete any of the definitions
 ## Adding should not be a problem
 ## check with ib/kisco/ibbar.py, it uses the above two functions for live

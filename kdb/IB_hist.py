@@ -51,7 +51,7 @@ def write_daily_bar(symbol, bar,bar_sec=5,last_close_px=None, fill_missing=False
     import pandas as pd
     dt=datetime.datetime.fromtimestamp(bar[0,0])  # fromtimestamp is safe for getting local representation of utc
 
-    start_hour, end_hour = l1.get_start_end_hour(l1.venue_by_symbol(symbol))
+    start_hour, end_hour = l1.get_start_end_hour(symbol)
     TRADING_HOURS=end_hour-start_hour
     start_hour = start_hour % 24
 

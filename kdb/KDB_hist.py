@@ -28,7 +28,7 @@ def bar_by_file(fn, skip_header=5) :
 
 def write_daily_bar(symbol,bar,bar_sec=5,old_cl_repo=None) :
     import pandas as pd
-    start_hour, end_hour = l1.get_start_end_hour(l1.venue_by_symbol(symbol))
+    start_hour, end_hour = l1.get_start_end_hour(symbol)
     TRADING_HOURS=end_hour-start_hour
     start_hour = start_hour % 24
 
