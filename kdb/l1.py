@@ -92,12 +92,17 @@ class TradingDayIterator :
         return utc0
 
     @staticmethod
-    def local_dt_to_utc(dt) :
-        return TradingDayIterator.local_ymd_to_utc(dt.strftime('%Y%m%d'),dt.hour,dt.minute,dt.second)
+    def local_dt_to_utc(dt, micro_fraction=False) :
+        frac = (dt.microsecond)/1000000.0 if micro_fraction else 0
+        return TradingDayIterator.local_ymd_to_utc(dt.strftime('%Y%m%d'),dt.hour,dt.minute,dt.second) + frac
 
     @staticmethod
     def utc_to_local_ymd(utc) :
         return datetime.datetime.fromtimestamp(utc).strftime('%Y%m%d')
+
+    @staticmethod
+    def cur_utc() :
+        return TradingDayIterator.local_dt_to_utc(datetime.datetime.now(),True)
 
 
 def tradinghour(dt) :
@@ -196,8 +201,8 @@ ICEFutures = ven_sym_map['ICE']
 future_venues=['NYM','CME','CBT','EUX','ICE','NYBOT']
 fx_venues=['FX']
 
-HoursDefines={'CMEAgriHours':[-4, 15], 'CMELiveStockHours':[9, 15], 'ICEHours':[-4, 18], 'CocoaHours':[4,14], 'CottonHours':[-3, 15], 'SugarHours':[3,13]}
-start_stop_hours_symbol={'CMEAgriHours': ['ZC','ZW','ZS','ZM','ZL'], 'CMELiveStockHours': ['HE', 'LE'], 'ICEHours':['LCO','LFU','LOU'], 'CocoaHours':['CC','KC'], 'CottonHours':['CT'], 'SugarHours':['SB'], }
+HoursDefines={'CMEAgriHours':[-4, 15], 'CMELiveStockHours':[9, 15], 'ICEHours':[-4, 18], 'CocoaHours':[4,14], 'CottonHours':[-3, 15], 'SugarHours':[3,13], 'USStock':[9,16]}
+start_stop_hours_symbol={'CMEAgriHours': ['ZC','ZW','ZS','ZM','ZL'], 'CMELiveStockHours': ['HE', 'LE'], 'ICEHours':['LCO','LFU','LOU'], 'CocoaHours':['CC','KC'], 'CottonHours':['CT'], 'SugarHours':['SB'], 'USStock':['ETF']}
 def venue_by_symbol(symbol) :
     for k,v in ven_sym_map.items() :
         if symbol in v :
@@ -211,7 +216,8 @@ def get_start_end_hour(symbol) :
     To add other non cme/ice venues, such as IDX and FX venues
     """
     for h in start_stop_hours_symbol.keys() :
-        if symbol in start_stop_hours_symbol[h]:
+        svlist = start_stop_hours_symbol[h] # could be either symbol or venue
+        if symbol in svlist or venue_by_symbol(symbol) in svlist :
             return HoursDefines[h]
 
     #default Future and FX hours
