@@ -276,7 +276,11 @@ def gen_bar(symbol, year_s=1998, year_e=2018, check_only=False, repo=None, kdb_h
     return ba, td, col
 
 def fix_days_from_old_cl_repo(td, sday, eday, old_cl_repo) :
-
+   """
+   Some days doesn't have history file, or lost in the backup
+   so getting them fro the old 5s_repo
+   This only applies to CL
+   """
     ti = l1.TradingDayIterator(sday)
     day1 = ti.yyyymmdd()
     barr = []

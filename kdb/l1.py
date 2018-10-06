@@ -101,6 +101,16 @@ class TradingDayIterator :
         return datetime.datetime.fromtimestamp(utc).strftime('%Y%m%d')
 
     @staticmethod
+    def utc_to_local_trading_day(utc) :
+        dt = datetime.datetime.fromtimestamp(utc)
+        ymd = dt.strftime('%Y%m%d')
+        if dt.hour >= 18 :
+            it = TradingDayIterator(ymd, adj_start=False)
+            it.next()
+            return it.yyyymmdd()
+        return ymd
+
+    @staticmethod
     def cur_utc() :
         return TradingDayIterator.local_dt_to_utc(datetime.datetime.now(),True)
 
@@ -119,7 +129,6 @@ MonthlyFrontContract =    ['G','H','J','K','M','N','Q','U','V','X','Z','F']
 BiMonthlyFrontContract =  ['G','J','J','M','M','Q','Q','V','V','Z','Z','G']
 GCMonthlyFrontContract =  ['G','J','J','M','M','Q','Q','Z','Z','Z','Z','G']
 HGMonthlyFrontContract =  ['H','H','K','K','N','N','U','U','Z','Z','Z','H']
-#HGMonthlyFrontContract =  ['H','H','H','K','K','N','N','U','U','Z','Z','Z']
 QuartlyFrontContract =    ['H','H','H','M','M','M','U','U','U','Z','Z','Z']
 OddMonthlyFrontContract = ['H','H','K','K','N','N','U','U','Z','Z','Z','H']
 SoybeanFrontContract =    ['H','H','K','K','N','N','X','X','X','X','F','F']
@@ -153,9 +162,7 @@ RollDates = {'CL':  [MonthlyFrontContract,   [16, 16, 16, 16, 16, 16, 16, 16, 16
              'FGBM':[QuartlyFrontContract,   [31, 31,  7, 31, 31,  7, 31, 31,  7, 31, 31,  7]], \
              'FGBS':[QuartlyFrontContract,   [31, 31,  7, 31, 31,  7, 31, 31,  7, 31, 31,  7]], \
              'FGBX':[QuartlyFrontContract,   [31, 31,  7, 31, 31,  7, 31, 31,  7, 31, 31,  7]], \
-#            'GC': [BiMonthlyFrontContract,  [25, 31, 25, 31, 25, 31, 25, 31, 25, 31, 26, 31]],  # 'V' is not good
              'GC': [GCMonthlyFrontContract,  [25, 31, 25, 31, 25, 31, 25, 31, 31, 31, 26, 31]],  # I am not sure about this \
-#             'HG': [HGMonthlyFrontContract, [31, 31, 25, 31, 25, 31, 25, 31, 25, 31, 31, 25]], 
              'HG': [HGMonthlyFrontContract,  [31, 25, 31, 25, 31, 27, 31, 29, 31, 31, 29, 31]], 
              'SI': [HGMonthlyFrontContract,  [31, 25, 31, 25, 31, 27, 31, 29, 31, 31, 29, 31]], 
              'ZC': [OddMonthlyFrontContract, [31, 20, 31, 20, 31, 20, 31, 20, 31, 31, 20, 31]],  # I am not sure about this \

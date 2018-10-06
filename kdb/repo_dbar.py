@@ -1,7 +1,7 @@
 import numpy as np
 import l1
 import copy
-import os
+IMPort os
 
 # This is the repository for storing
 # daily bars of all assets.  Each asset
@@ -53,7 +53,21 @@ import os
 # * allow plotting to check availablity
 # 
 
-repo_col={'utc':0, 'lr':1, 'vol':2, 'vbs':3, 'lrhl':4, 'vwap':5, 'ltt':6, 'lpx':7}
+
+###  Be very careful aboout the columns, 
+###  ONLY ADD, NEVER DELETE
+###  
+hist_col=['utc', 'lr', 'vol', 'vbs', 'lrhl', 'vwap', 'ltt', 'lpx']
+l1bar_col=['spd', 'bs', 'as', 'qbc', 'qac', 'tbc', 'tsc', 'ism1']
+all_col=hist_col+l1bar_col
+def make_repo_col() :
+    col={}
+    for i, c in enumerate(all_col) :
+        col[c]=i
+    return col
+repo_col=make_repo_col()
+
+### Special columns from history
 utcc=repo_col['utc']
 lrc=repo_col['lr']
 volc=repo_col['vol']
@@ -200,20 +214,37 @@ class RepoDailyBar :
             self._dump_day(d, rb, col, bs)
         print 'Done'
 
-    def overwrite(self, bar_arr, day_arr, col_arr, bar_sec, rowix = None) :
+    def overwrite(self, bar_arr, day_arr, col_arr, bar_sec, rowix = None, utcix = None) :
         """
         This writes each of the bar to the repo, overwrite existing columns
         if exist, but leave other columns of existing day unchanged. 
         optional rowix, if set, is a two dimensional array, each for a day
         about the specific rows to be updated.  Used for adding l1 data
         where gaps are common. elements of rowix can be none for all. 
+        If rowix is None, utcix can be spceified similarly on per-day basis. 
+        utcix is a list of daily utc upon when to apply the column data.
+        In this case utcix is converted to rowix. 
         Note in case adding columns to existing bars, the rowix has to
         aggree with the totbars, just as update() above. 
         Refer to update()
         """
         totbars = self._get_totalbars(bar_sec)
         if rowix is None :
-            rowix = np.tile( np.arange(totbars), (len(bar_arr), 1))
+            if utcix is None :
+                rowix = np.tile( np.arange(totbars), (len(bar_arr), 1))
+            else :
+                rowix = []
+                for day, uix in zip(day_arr, utcix) :
+                    u0 = self._make_daily_utc(day, bar_sec)
+                    ix0 = np.searchsorte(u0, uix)
+
+                    zix = np.nonzero(u0[ix0] - uix == 0)[0]
+                    print 'overwrite %d, total bar %d, got %d, mismatch %d'%( day, totbars, len(uix), len(uix)-len(zix))
+                    if len(zix) != len(uix) :
+                        print 'mismatched: ', np.delete(np.arange(len(ix0)), zix)
+                        ix0=ix0[zix]
+                    rowix.append(ix0)
+
         assert len(bar_arr) == len(rowix), 'len(bar_arr) != len(rowix)'
         for b, d, c, rix in zip(bar_arr, day_arr, col_arr, rowix) :
             if rix is None :
@@ -224,7 +255,7 @@ class RepoDailyBar :
             if len(rb) != 0 :
                 print len(rb)
                 if bar_sec != bs :
-                    print 'barsec mismatch, skipping '
+                    print 'barsec mismatch, skipping ', d
                     continue
                 if len(rb) != totbars :
                     raise ValueError('repo bar has incorrect row count???')
@@ -386,10 +417,14 @@ class RepoDailyBar :
         for c0 in tgt_cols :
             assert c0 in c, 'column ' + col_name(c0) + ' not found in '+ str(col_name(c))
             v0 = b[:, ci(c,c0)]
-            if c0 in [utcc, lttc, lpxc] :
+            if c0 in [utcc, lttc, lpxc] +  ci_idx(['ism1']) :
                 # needs to get the latest snap
                 nb.append(v0[ix])
-            elif c0 in [lrc, volc, vbsc, lrhlc] :
+            elif c0 in ci_idx(['spd','bs','as']) :
+                # needs to get an average
+                v1=np.r_[0,np.cumsum(v0)[ix]]
+                nb.append((v1[1:]-v1[:-1])/(tgt_bs/bs))
+            elif c0 in [lrc, volc, vbsc, lrhlc] + ci_idx(['qbc','qac','tbc','tsc']):
                 # needs aggregate
                 v1=np.r_[0,np.cumsum(v0)[ix]]
                 nb.append(v1[1:]-v1[:-1])
