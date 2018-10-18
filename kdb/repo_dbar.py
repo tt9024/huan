@@ -1,7 +1,7 @@
 import numpy as np
 import l1
 import copy
-IMPort os
+import os
 
 # This is the repository for storing
 # daily bars of all assets.  Each asset
@@ -417,14 +417,14 @@ class RepoDailyBar :
         for c0 in tgt_cols :
             assert c0 in c, 'column ' + col_name(c0) + ' not found in '+ str(col_name(c))
             v0 = b[:, ci(c,c0)]
-            if c0 in [utcc, lttc, lpxc] +  ci_idx(['ism1']) :
+            if c0 in [utcc, lttc, lpxc] +  col_idx(['ism1']) :
                 # needs to get the latest snap
                 nb.append(v0[ix])
-            elif c0 in ci_idx(['spd','bs','as']) :
+            elif c0 in col_idx(['spd','bs','as']) :
                 # needs to get an average
                 v1=np.r_[0,np.cumsum(v0)[ix]]
                 nb.append((v1[1:]-v1[:-1])/(tgt_bs/bs))
-            elif c0 in [lrc, volc, vbsc, lrhlc] + ci_idx(['qbc','qac','tbc','tsc']):
+            elif c0 in [lrc, volc, vbsc, lrhlc] + col_idx(['qbc','qac','tbc','tsc']):
                 # needs aggregate
                 v1=np.r_[0,np.cumsum(v0)[ix]]
                 nb.append(v1[1:]-v1[:-1])

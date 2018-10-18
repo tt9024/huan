@@ -71,13 +71,24 @@ class L1Bar :
         2. add columns of bs, as, spd qbc qac tbc tsc ism1, fill-in on missing
         """
 
+        darr = []
+        uarr = []
+        barr = []
+        earr = []
         while True :
             day, utc, bcols, ecols = self._read_day(self.f)
             if day is not None :
                 print 'read day ', day, ' ', len(utc), ' bars.', ' has ext:', ecols is not None
-                self._udp_repo(day, utc, bcols, ecols)
+                if self.dbar is not None:
+                    self._udp_repo(day, utc, bcols, ecols)
+                darr.append(day)
+                uarr.append(utc)
+                barr.append(bcols)
+                earr.append(ecols)
             else :
                 break
+
+        return darr, np.array(uarr), np.array(barr), np.array(earr)
 
     def _udp_repo(self, day, utc, bcols, ecols) :
         """
@@ -138,7 +149,7 @@ class L1Bar :
         if len(cols) < 13:
             return None
 
-        return [cols[8], cols[9] cols[10], cols[11], cols[12]]
+        return [cols[8], cols[9], cols[10], cols[11], cols[12]]
 
     def _parse_line(self, bline, parse_ext = True) :
         """
