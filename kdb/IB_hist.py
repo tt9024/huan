@@ -195,6 +195,7 @@ def write_daily_bar(symbol, bar,bar_sec=5,last_close_px=None, fill_missing=False
             bar_arr.append(ltt)
 
             # get the last price, as a debugging tool
+            # close price
             lpx=np.empty(N)*np.nan
             lpx[ix_utc]=bar0[:,5]
             df=pd.DataFrame(lpx)
@@ -202,6 +203,9 @@ def write_daily_bar(symbol, bar,bar_sec=5,last_close_px=None, fill_missing=False
             if not np.isfinite(lpx[0]) :
                 df.fillna(last_close_px,inplace=True)
             bar_arr.append(lpx)
+
+
+
             ba = np.array(bar_arr).T
             bt0=ba[:,0]
             lr0=ba[:,1]

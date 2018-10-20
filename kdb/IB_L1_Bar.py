@@ -69,24 +69,34 @@ class L1Bar :
         Repo update rules :
         1. overwrite the vol and vbs based on bv and sv, whenever exist (use an index)
         2. add columns of bs, as, spd qbc qac tbc tsc ism1, fill-in on missing
+
+        return :
+        day_arr, utc_arr, bcol_arr, ecol_arr.
+        day_arr: array of days
+        utc_arr: array of utc for each day
+        bcol_arr: array of basic columns for each day.  
+                 ['vol', 'vbs', 'spd', 'bs', 'as', 'mid']
+        ecol_arr: array of extended columns for each day
+                 ['qbc', 'qac', 'tbc', 'tsc', 'ism1']
         """
 
         darr = []
         uarr = []
         barr = []
         earr = []
-        while True :
-            day, utc, bcols, ecols = self._read_day(self.f)
-            if day is not None :
-                print 'read day ', day, ' ', len(utc), ' bars.', ' has ext:', ecols is not None
-                if self.dbar is not None:
-                    self._udp_repo(day, utc, bcols, ecols)
-                darr.append(day)
-                uarr.append(utc)
-                barr.append(bcols)
-                earr.append(ecols)
-            else :
-                break
+        with open(self.bar_file, 'r') as f:
+            while True :
+                day, utc, bcols, ecols = self._read_day(f)
+                if day is not None :
+                    print 'read day ', day, ' ', len(utc), ' bars.', ' has ext:', ecols is not None
+                    if self.dbar is not None:
+                        self._udp_repo(day, utc, bcols, ecols)
+                    darr.append(day)
+                    uarr.append(utc)
+                    barr.append(bcols)
+                    earr.append(ecols)
+                else :
+                    break
 
         return darr, np.array(uarr), np.array(barr), np.array(earr)
 
@@ -100,7 +110,7 @@ class L1Bar :
         ow_arr = bcols[:, :2]
         repo.overwrite([ow_arr], [day], [ow_cols], self.bar_sec, utcix=utc)
         upd_arr = bcols[:, 2:]
-        upd_cols = repo.col_idx(['spd', 'bs','as'])
+        upd_cols = repo.col_idx(['spd','bs','as','mid'])
         if ecols is not None:
             upd_arr = np.vstack((upd_arr, ecols))
             upd_cols+=repo.col_idx(['qbc','qac','tbc','tsc','ism1'])
@@ -114,6 +124,12 @@ class L1Bar :
         self.repo.update([upc], [day], [upd_cols], self.bar_sec)
 
     def _adjust_time(self, utc) :
+        """
+        NOTE 1: utc offset:
+        From 201805301800 to 201806261700, utc + 1 matches with history
+        From 201806261800 to 201808171700, utc + 2 matches with history
+        Good afterwards
+        """
         if utc >= self.utc10 and utc <= self.utc11 :
             return utc+1
         if utc >= self.utc20 and utc <= self.utc21 :
@@ -126,15 +142,16 @@ class L1Bar :
         [UTC, bs, bp, ap, as, bv, sv, utc_at_collect, qbc, qac, bc, sc, ism_avg]
 
         returns the basic columns of a barline :
-        ['vol', 'vbs', 'spd', 'bs', 'as']
+        ['vol', 'vbs', 'spd', 'bs', 'as', 'mid']
 
         Note the line could be invalid, for zero prices.
         if not valid, return None
         """
         # validate
-        if abs(cols[1]*cols[2]) > 1e-12 :
+        if abs(cols[1]*cols[2]) <= 1e-12 or \
+           abs(cols[3]*cols[4]) <= 1e-12 :
             return None
-        return [cols[5] + cols[6], col[5]-col[6], col[3]-col[2], col[1], col[4]]
+        return [cols[5] + cols[6], cols[5]-cols[6], cols[3]-cols[2], cols[1], cols[4], (cols[2] + cols[3])/2]
 
     def _ext_cols(self, cols) :
         """
@@ -157,7 +174,7 @@ class L1Bar :
 
         read a line in text format into utc, basic ext fields
         utc: the bar time
-        basic: the basic fields without utc: ['vol', 'vbs', 'spd', 'bs', 'as']
+        basic: the basic fields without utc: ['vol', 'vbs', 'spd', 'bs', 'as', 'mid']
         ext: the extended fields:            ['qbc', 'qac', 'tbc', 'tsc', 'ism1']
              otherwise None
 
@@ -170,6 +187,7 @@ class L1Bar :
 
         Note 3: The ext columns may not be available
         """
+
         cols=bline.replace('\n','').split(',')
         utc = self._adjust_time(int(cols[0]))
         cols = np.array(cols).astype(float)
