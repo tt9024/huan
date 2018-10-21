@@ -58,7 +58,7 @@ import os
 ###  ONLY ADD, NEVER DELETE
 ###  
 hist_col=['utc', 'lr', 'vol', 'vbs', 'lrhl', 'vwap', 'ltt', 'lpx']
-l1bar_col=['spd', 'bs', 'as', 'qbc', 'qac', 'tbc', 'tsc', 'ism1']
+l1bar_col=['spd', 'bs', 'as', 'mid', 'qbc', 'qac', 'tbc', 'tsc', 'ism1']
 all_col=hist_col+l1bar_col
 def make_repo_col() :
     col={}
@@ -124,6 +124,10 @@ class RepoDailyBar :
         
     def __init__(self, symbol, repo_path='/cygdrive/e/research/kdb/repo', bootstrap_idx=None, venue=None, create=False) :
         """
+        boostrap_idx: an optional idx to use if the idx file doesn't exist (idx.npz)
+        venue:   an optional venue for the symbol, i.e. EBS.  path will append the venue name
+        create:  if the idx does not exist, create a new (empty) idx
+
         idx.npz stores global as well as daily configurations
         global:
            start hour
@@ -316,21 +320,25 @@ class RepoDailyBar :
         ti=l1.TradingDayIterator(start_day)
         day=ti.yyyymmdd()
         bar = []
+        day_arr=[]
         while day <= end_day :
             print "reading ", day, 
             b, c, bs = self.load_day(day)
             if len(b) == 0 :
                 print " missing, filling zeros"
                 bar.append(self._fill_daily_bar_col(day,bar_sec,cols))
+                day_arr.append(day)
             else :
                 bar.append(self._scale(day, b, c, bs, cols, bar_sec))
+                day_arr.append(day)
                 print " scale bar_sec from ", bs, " to ", bar_sec
             ti.next()
             day=ti.yyyymmdd()
 
         bar = np.vstack(bar)
+        
         # process missing days if any
-        for c in [lpxc, cols] :
+        for c in [lpxc, lttc] + col_idx(['mid','ism1']) :
             if c in cols :
                self._fill_last(bar[:, ci(cols,c)])
 
@@ -399,7 +407,7 @@ class RepoDailyBar :
         for c in col_arr :
             if c == utcc :
                 ca.append(self._make_daily_utc(day, bar_sec))
-            elif c in [lttc, lpxc] :
+            elif c in [lttc, lpxc] + col_idx(['mid','ism1']) :
                 # fill in nan, process it later
                 ca.append(np.array( [np.nan]*tb ))
             else :
@@ -417,7 +425,7 @@ class RepoDailyBar :
         for c0 in tgt_cols :
             assert c0 in c, 'column ' + col_name(c0) + ' not found in '+ str(col_name(c))
             v0 = b[:, ci(c,c0)]
-            if c0 in [utcc, lttc, lpxc] +  col_idx(['ism1']) :
+            if c0 in [utcc, lttc, lpxc] +  col_idx(['mid','ism1']) :
                 # needs to get the latest snap
                 nb.append(v0[ix])
             elif c0 in col_idx(['spd','bs','as']) :
