@@ -7,6 +7,8 @@ import pdb
 import glob
 import l1
 import repo_dbar as repo
+import pandas as pd
+import copy
 
 class L1Bar :
     def __init__(self, symbol, bar_file, dbar_repo) :
@@ -25,6 +27,19 @@ class L1Bar :
        
         Parser will get from the file in 
         bar/NYM_CL_B1S.csv
+
+        Based on a line in the bar file, the parsing returns the following two arrays
+        bcol_arr: array of basic columns for each day.  
+                 ['vol', 'vbs', 'spd', 'bs', 'as', 'mid']
+        ecol_arr: array of extended columns for each day
+                 ['qbc', 'qac', 'tbc', 'tsc', 'ism1']
+
+        if dbar_repo is not None, it will update repo by the following rule:
+        1. overwrite the [lrc,volc,vbsc,lpxc], whenever exist (indexing using the utcc)
+        2. add columns of bs, as, spd qbc qac tbc tsc ism1, fill-in on missing
+           (see NOTE 5)
+
+
         NOTE 1: utc offset:
         From 201805301800 to 201806261700, utc + 1 matches with history
         From 201806261800 to 201808171700, utc + 2 matches with history
@@ -43,11 +58,19 @@ class L1Bar :
         Be prepared for any data losses and errors!
         zero prices, zero sizes
         
-        Repo update rules :
-        Read those l1 bar files and update repo with appropriate columns of 1s bars
-        1. overwrite the vol and vbs based on bv and sv, whenever exist (use an index)
-        2. add columns of bs, as, spd qbc qac tbc tsc ism1, fill-in on missing
 
+        Note 5:
+        There are 1~2 second drift on the hist's mid and L1's mid before 8/18/2018.
+        Since the L1 is the live trading one, it is given more emphasis. 
+        To be consistent, the lr also is overwritten together with vol and vbs.
+
+        But when constructing lr to override, due to the first lr being
+        calculated with previous trading day on the same contract, 
+        BE SURE to use the hist data on the first index
+
+        Weekend ingestion process for front/back future contract:
+        1. collect and ingest hist file, handling missings
+        2. read and ingest bar files
         """
         self.symbol = symbol
         self.hours = l1.get_start_end_hour(symbol)
@@ -90,7 +113,7 @@ class L1Bar :
                 if day is not None :
                     print 'read day ', day, ' ', len(utc), ' bars.', ' has ext:', ecols is not None
                     if self.dbar is not None:
-                        self._udp_repo(day, utc, bcols, ecols)
+                        self._upd_repo(day, utc, bcols, ecols)
                     darr.append(day)
                     uarr.append(utc)
                     barr.append(bcols)
@@ -100,28 +123,166 @@ class L1Bar :
 
         return darr, np.array(uarr), np.array(barr), np.array(earr)
 
-    def _udp_repo(self, day, utc, bcols, ecols) :
+
+    def _best_shift_multi_seg(self, lpx_hist0, lpx_mid0, startix=0, endix=-1) :
+        """
+        This is similar (and uses) _best_shift(), but it tries to detect
+        if the shift changes during a day, which (I don't know why) happens
+        during 7/24/2018.  
+        This needs to be robust, to allow noisy but it uses the hist data
+        as a reference against the live data.  
+
+        It tries to find/merge a shift segment iteratively until converge
+        """
+
+        totcnt = len(lpx_hist0)
+        if endix == -1 :
+            endix = totcnt
+        lpx_hist = lpx_hist0[startix:endix]
+        lpx_mid  = lpx_mid0[startix:endix]
+        thiscnt = len(lpx_hist)
+
+        sh0 = self._best_shift(lpx_hist, lpx_mid, order=0)
+        if thiscnt < 600 :
+            return [[startix, endix]], [sh0]
+
+        # divide equally and find shift for both segments
+        cnt = thiscnt/2
+        sh1 = self._best_shift(lpx_hist[:cnt], lpx_mid[:cnt], order=0)
+        print '<<< ', startix, ', ', startix+cnt, ', ', sh1
+        sh2 = self._best_shift(lpx_hist[cnt:], lpx_mid[cnt:], order=0)
+        print '>>> ', startix+cnt, ', ', endix, ', ', sh2
+
+        if sh1 == sh2 :
+            assert sh1 == sh0, 'segment shift disagree with total shift!'
+            print 'CONFIRMED! ', sh1
+            return [[startix, endix]], [sh1]
+        
+        ixarr = []
+        sharr = []
+        ix1, sh1 = self._best_shift_multi_seg(lpx_hist0, lpx_mid0, startix, startix+cnt)
+        ix2, sh2 = self._best_shift_multi_seg(lpx_hist0, lpx_mid0, startix+cnt, endix)
+        print '!!! ', ix1+ix2, sh1+sh2
+        return ix1+ix2, sh1+sh2
+
+    def _best_shift(self, lpx_hist, lpx_mid, order=0.5) :
+        # lpx_hist is the lpx from IB_hist, with correct clock shift
+        # lpx_mid is the lpx after the overwritten by Bar_L1's mid, with clock skew
+        # returns the best shift base on the MSE
+        # order is the exponent to the absolute of difference, default squre root to
+        #       put more focus on consistent difference while avoid noise during breakout
+        #       set order = 0 to count exact matching points
+        # NOTE: this shift matches the lpx_mid's shift, when adjusting, 
+        # it should be componsated, i.e. use negative of shift to apply to utc
+        assert len(lpx_hist) == len(lpx_mid), 'lpx_hist and lpx_mid length mismatch'
+
+        sharr=np.array([-2, -1,0,1, 2])
+        stsh = 5
+        mse = []
+        y = lpx_hist[stsh:-stsh]
+        for shift in sharr :
+            x = lpx_mid[stsh + shift : -stsh + shift]
+            absdiff = np.abs(y-x)
+            if order == 0 :
+                # get the count
+                mct = np.nonzero(absdiff > 1e-10)[0]
+                v = float(len(mct))/float(len(absdiff))
+            else :
+                v=np.mean(absdiff**order)
+            mse.append(v)
+        ix = np.argsort(mse)
+        
+        print 'got mse ', mse, ' ix ', ix, ' shift', sharr[ix[0]]
+        return sharr[ix[0]]
+        
+    def _upd_repo(self, day, utc, bcols, ecols) :
         """
         update day to the daily bar repo
-        overwrite the vol and vbx
+        overwrite the vol and vbx, also the lr based lr (see NOTES)
         update the rest 8 columns
-        """
-        ow_cols = repo.col_idx(['vol', 'vbs'])
-        ow_arr = bcols[:, :2]
-        repo.overwrite([ow_arr], [day], [ow_cols], self.bar_sec, utcix=utc)
-        upd_arr = bcols[:, 2:]
-        upd_cols = repo.col_idx(['spd','bs','as','mid'])
-        if ecols is not None:
-            upd_arr = np.vstack((upd_arr, ecols))
-            upd_cols+=repo.col_idx(['qbc','qac','tbc','tsc','ism1'])
 
-        # need to fill-in zeros on missing numbers
+        Note 1:
+        There are 1~2 second drift on the hist's mid and L1's mid.
+        Since the L1 is the live trading one, it is given more emphasis. 
+        To be consistent, the lr also is overwritten together with vol and vbs.
+
+        Note 2:
+        when constructing lr to override, due to the first lr being
+        calculated with previous trading day on the same contract, 
+        BE SURE to use the hist data on the first index
+        """
+
+        # figure out the best time shift (due to collection machine's clock problem) 
+        # during 20180530 to 20180818
+        utc0 = utc[0]
+        if utc0 != self._adjust_time(utc0) :
+            ## Save the original lpx history for possible second shift adjustments
+            bar, col, bs = self.dbar.load_day(day)
+            lpx_hist = bar[:, repo.col_idx('lpx')]
+
+        ow_cols = repo.col_idx(['lr','vol', 'vbs', 'lpx'])
+        mid=bcols[:,-1]
+        lr = np.r_[0, np.log(mid[1:])-np.log(mid[:-1])]
+        ow_arr = np.vstack((lr, bcols[:, :2].T, mid)).T
+        upd_cols = repo.col_idx(['spd','bs','as'])
+        upd_arr = bcols[:, 2:5]
+        if ecols is not None:
+            upd_cols+=repo.col_idx(['qbc','qac','tbc','tsc','ism1'])
+            upd_arr = np.vstack((upd_arr.T, ecols.T)).T
+
+        # overwrite lr/vol/vbs/lpx, make sure the first index is not overwritten
+        # refer to Note 2 above
+        self.dbar.overwrite([ow_arr[1:, :]], [day], [ow_cols], self.bar_sec, utcix=[utc[1:]])
+        if utc0 != self._adjust_time(utc0) :
+            # due to clock skew on collection machine of Live L1 Bar,
+            # fixed shift may not always be accurate.  So do a MSE check
+            # to fine tune -1/+1 
+            # Note the mse calculated on fixed time series from repo to 
+            # make the comparison right
+            bar, col, bs = self.dbar.load_day(day)
+            lpx_mid = bar[:, repo.col_idx('lpx')]
+            """
+            #The old way of getting only one shift, but the data is messier than this!
+            shift = self._best_shift(lpx_hist, lpx_mid)
+            if shift != 0 :
+                print 'got shift of ', shift, ', reapply the utc with ', -shift, ' and overwrite!'
+                utc-=shift
+                self.dbar.overwrite([ow_arr[1:, :]], [day], [ow_cols], self.bar_sec, utcix=[utc[1:]])
+            """
+            ixa, sha = self._best_shift_multi_seg(lpx_hist, lpx_mid)
+            print 'got shift of ', ixa, -np.array(sha),  ', reapply and overwrite!'
+            for ix, shift in zip(ixa, sha) :
+                if shift != 0 :
+                    utc[ix[0]:ix[1]]-=shift
+
+            # need to make sure the utc monotically increase, remove idx if needed
+            ixbad = np.nonzero( utc[1:]-utc[:-1] < 1)[0]
+            if len(ixbad) > 0 :
+                print 'removing duplicated ix ', ixbad
+                utc=np.delete(utc, ixbad)
+                ow_arr = np.delete(ow_arr, ixbad, axis=0)
+                upd_arr = np.delete(upd_arr, ixbad, axis=0)
+
+            self.dbar.overwrite([ow_arr[1:, :]], [day], [ow_cols], self.bar_sec, utcix=[utc[1:]])
+        
+        # need to fill-in zeros on missing bars of the day
         utc0 = self.dbar._make_daily_utc(day, self.bar_sec)
-        ix0 = np.searchsorte(utc0, utc)
+        ix0 = np.clip(np.searchsorted(utc0, utc),0,len(utc0)-1)
+        ix1 = np.nonzero(utc0[ix0]-utc == 0)[0]
 
         upc = np.zeros((len(utc0), len(upd_cols)))
-        upc[ix0, :] = upd_arr
-        self.repo.update([upc], [day], [upd_cols], self.bar_sec)
+        upc[ix0[ix1], :] = upd_arr[ix1, :]
+        # 'spd' and 'ism1' needs to fill back/forward
+        for i in [0, -1] :
+            d = upc[:, i]
+            ix = np.nonzero(d==0)[0]
+            d[ix]=np.nan
+            df=pd.DataFrame(d)
+            df.fillna(method='ffill',inplace=True)
+            df.fillna(method='bfill',inplace=True)
+
+        self.dbar.overwrite([upc], [day], [upd_cols], self.bar_sec)
+        #self.dbar.update([upc], [day], [upd_cols], self.bar_sec)
 
     def _adjust_time(self, utc) :
         """
@@ -131,8 +292,10 @@ class L1Bar :
         Good afterwards
         """
         if utc >= self.utc10 and utc <= self.utc11 :
+            #print 'adding bar utc by 1'
             return utc+1
         if utc >= self.utc20 and utc <= self.utc21 :
+            #print 'adding bar utc by 2'
             return utc+2
         return utc
 
@@ -150,6 +313,7 @@ class L1Bar :
         # validate
         if abs(cols[1]*cols[2]) <= 1e-12 or \
            abs(cols[3]*cols[4]) <= 1e-12 :
+            print 'problem with the cols {0}'.format(cols)
             return None
         return [cols[5] + cols[6], cols[5]-cols[6], cols[3]-cols[2], cols[1], cols[4], (cols[2] + cols[3])/2]
 
@@ -167,6 +331,22 @@ class L1Bar :
             return None
 
         return [cols[8], cols[9], cols[10], cols[11], cols[12]]
+
+    def _is_missing(self, utc, ext) :
+        try :
+            ism = ext[-1]
+            cnts = np.sum(ext[:-1])
+            ismdiff = np.abs(ism-self.prev_ism)
+            if ismdiff < 1e-10 and cnts == 0 :
+                eq_dur = utc - self.last_eq
+                if eq_dur > 60 : # if it's more than 1 minutes of eq
+                    return True
+        except :
+            pass
+
+        self.last_eq = utc
+        self.last_ism = ism
+        return False
 
     def _parse_line(self, bline, parse_ext = True) :
         """
@@ -222,6 +402,9 @@ class L1Bar :
             l = bfp.readline()
             if len(l) > 20 : # some minimum size
                 utc, basic, ext = self._parse_line(l, parse_ext=parse_ext)
+                if basic is None : 
+                    # parsing error, next
+                    continue
                 d0 = l1.TradingDayIterator.utc_to_local_trading_day(utc)
                 if day is None :
                     day = d0
@@ -238,7 +421,56 @@ class L1Bar :
                 break
         bcols = np.array(bcols)
         ecols = np.array(ecols) if parse_ext else None
-        return day, np.array(tcol), bcols, ecols
+        tcol = np.array(tcol)
+
+        # this is slightly complicated, as the bar will repeat
+        # old price in case of disconnection (i.e. missing)
+        # so we shouldn't include those stucked ticks in
+        if parse_ext is not None :
+            # check for the missing by detecting equals in ism and counts
+            last_ism = 0
+            last_eq = None
+            miss_arr=[]
+            missing = False
+            marr=[]
+            for u0, ext in zip(tcol, ecols) :
+                ism = ext[-1]
+                cnts = np.sum(ext[:-1])
+                if cnts == 0 and np.abs(ism-last_ism) < 1e-10:
+                    if last_eq is None :
+                        last_eq = u0
+                    eq_sec = u0 - last_eq
+                    if eq_sec > 30 :
+                        # mark missing
+                        if not missing :
+                            missing = True
+                            marr.append(last_eq)
+                            print 'missing data detected starting on ', datetime.datetime.fromtimestamp(last_eq)
+                else :
+                    if missing :
+                        missing = False
+                        marr.append(u0)
+                        miss_arr.append(copy.deepcopy(marr))
+                        print 'missing data end at ', datetime.datetime.fromtimestamp(u0)
+                        marr = []
+                    last_ism = ism
+                    last_eq = None
+
+            if missing :
+                marr.append(u0+1)
+                miss_arr.append(copy.deepcopy(marr))
+
+            # remove indexes in miss_arr
+            remove_ix = []
+            for [s, e] in miss_arr :
+                ix = np.searchsorted(tcol, [s, e])
+                remove_ix = np.r_[remove_ix, np.arange(ix[0], ix[1])]
+
+            tcol = np.delete(tcol, remove_ix)
+            bcols = np.delete(bcols, remove_ix, axis=0)
+            ecols = np.delete(ecols, remove_ix, axis=0)
+
+        return day, tcol, bcols, ecols
 
 def read_l1(bar_file) :
     b = np.genfromtxt(bar_path, delimiter=',', use_cols=[0,1,2,3,4,5,6])

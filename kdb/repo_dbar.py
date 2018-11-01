@@ -58,7 +58,7 @@ import os
 ###  ONLY ADD, NEVER DELETE
 ###  
 hist_col=['utc', 'lr', 'vol', 'vbs', 'lrhl', 'vwap', 'ltt', 'lpx']
-l1bar_col=['spd', 'bs', 'as', 'mid', 'qbc', 'qac', 'tbc', 'tsc', 'ism1']
+l1bar_col=['spd', 'bs', 'as', 'qbc', 'qac', 'tbc', 'tsc', 'ism1']
 all_col=hist_col+l1bar_col
 def make_repo_col() :
     col={}
@@ -238,26 +238,29 @@ class RepoDailyBar :
                 rowix = np.tile( np.arange(totbars), (len(bar_arr), 1))
             else :
                 rowix = []
-                for day, uix in zip(day_arr, utcix) :
+                barr = []
+                for day, uix, ba in zip(day_arr, utcix, bar_arr) :
                     u0 = self._make_daily_utc(day, bar_sec)
-                    ix0 = np.searchsorte(u0, uix)
-
+                    ix0 = np.clip(np.searchsorted(u0, uix), 0, len(u0)-1)
                     zix = np.nonzero(u0[ix0] - uix == 0)[0]
-                    print 'overwrite %d, total bar %d, got %d, mismatch %d'%( day, totbars, len(uix), len(uix)-len(zix))
+                    print 'overwrite %s, total bar %d, len(utcix)=%d, mismatch %d'%( day, totbars, len(uix), len(uix)-len(zix))
                     if len(zix) != len(uix) :
-                        print 'mismatched: ', np.delete(np.arange(len(ix0)), zix)
+                        print 'missing: ', np.delete(np.arange(len(u0)), ix0[zix])
+                        print 'not used:', np.delete(np.arange(len(ix0)), zix)
                         ix0=ix0[zix]
                     rowix.append(ix0)
+                    barr.append(ba[zix,:])
+                bar_arr = barr
 
         assert len(bar_arr) == len(rowix), 'len(bar_arr) != len(rowix)'
         for b, d, c, rix in zip(bar_arr, day_arr, col_arr, rowix) :
             if rix is None :
                 rix = np.arange(totbars)
-            print 'overwrite bar: ', d, ' bar_cnt: ', len(b), '/', totbars, ' ... ',
+            print 'overwrite!  day: ', d, ' bar_cnt: ', len(b), '/', totbars, ' ... ',
             rb, col, bs = self.load_day(d)
             # just write that in
             if len(rb) != 0 :
-                print len(rb)
+                print ' loaded ', len(rb), ' bars'
                 if bar_sec != bs :
                     print 'barsec mismatch, skipping ', d
                     continue
@@ -265,16 +268,16 @@ class RepoDailyBar :
                     raise ValueError('repo bar has incorrect row count???')
 
                 for i, c0 in enumerate(c) :
-                    print i, ', ', col_name(c0), 
+                    print 'column: ', col_name(c0),
                     if c0 in col :
                         if c0 == utcc :
-                            print 'cannot overwrite utc timestamp! skipping ...'
+                            print ' cannot overwrite utc timestamp! skipping ...'
                         else :
                             print ' overwriting existing repo '
                             rb[rix, ci(col, c0)] = b[:, i]
                         continue
                     else :
-                        print 'adding to repo '
+                        print 'a new column! adding to repo '
                         # but in this case, the rowix has to match totbars
                         if len(rix) != totbars :
                             raise ValueError('rix not equal to totbars for adding column ' + str(len(rix)))
@@ -338,7 +341,7 @@ class RepoDailyBar :
         bar = np.vstack(bar)
         
         # process missing days if any
-        for c in [lpxc, lttc] + col_idx(['mid','ism1']) :
+        for c in [lpxc, lttc] + col_idx(['ism1']) :
             if c in cols :
                self._fill_last(bar[:, ci(cols,c)])
 
@@ -407,7 +410,7 @@ class RepoDailyBar :
         for c in col_arr :
             if c == utcc :
                 ca.append(self._make_daily_utc(day, bar_sec))
-            elif c in [lttc, lpxc] + col_idx(['mid','ism1']) :
+            elif c in [lttc, lpxc] + col_idx(['ism1']) :
                 # fill in nan, process it later
                 ca.append(np.array( [np.nan]*tb ))
             else :
@@ -425,7 +428,7 @@ class RepoDailyBar :
         for c0 in tgt_cols :
             assert c0 in c, 'column ' + col_name(c0) + ' not found in '+ str(col_name(c))
             v0 = b[:, ci(c,c0)]
-            if c0 in [utcc, lttc, lpxc] +  col_idx(['mid','ism1']) :
+            if c0 in [utcc, lttc, lpxc] +  col_idx(['ism1']) :
                 # needs to get the latest snap
                 nb.append(v0[ix])
             elif c0 in col_idx(['spd','bs','as']) :
