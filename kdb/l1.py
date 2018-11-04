@@ -738,6 +738,39 @@ def get_inc_idx(ts) :
         ixa = np.delete(ixa, dix)
     return ixa
 
+def get_inc_idx2(utc, time_inc=True) :
+    """
+    same as get_inc_idx(ts, time_inc), except it prefers later idx for duplication
+    utc is an integer type or a float type without a meaningful fraction. 
+          i.e. no fraction part as milliseconds or microseconds. 
+    time_inc is True if the chosen idx is strictly increase. 
+
+    For example, ts = [0,2,0,1,4], 
+        get_inc_idx(ts) returns [0,1,4]
+        get_inc_idx2(ts, time_inc=False) returns [2,3,1,4]
+        get_inc_idx2(ts, time_inc=True) returns [2,3,4]
+
+    Usage1: getting an increasing sequence after time adjust in IB_L1_Bar._upd_repo()
+            this should use get_inc_idx2() to favor later ones, but don't allow time
+            to go back by setting time_inc to True
+    Usage2: duplication in IB_Hist() where each line is equally good as long as it is
+            present. But lines could loop back due to repeated download
+            this should use get_inc_idx2(ts, time_inc=False) to allow maximum
+            lines
+    """
+    ts = np.round(utc).astype(int)
+    ts0 = min(ts)
+    ts1 = max(ts)
+    rng = ts1-ts0
+    v = np.empty(rng+1)
+    v[:] = np.nan
+    v[ts-ts0] = np.arange(len(ts))
+    ix = np.nonzero(np.isfinite(v))[0]
+    vix = v[ix].astype(int)
+    if time_inc :
+        vix = vix[get_inc_idx(vix).astype(int)]
+    return vix
+
 def bar_by_file_ib(fn,bid_ask_spd,bar_qt=None,bar_trd=None) :
     """ 
     _qt.csv and _trd.csv are expected to exist for the given fn

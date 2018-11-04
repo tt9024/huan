@@ -2,6 +2,7 @@ import numpy as np
 import l1
 import copy
 import os
+import traceback
 
 # This is the repository for storing
 # daily bars of all assets.  Each asset
@@ -100,6 +101,53 @@ def ci(carr, c) :
             return i
     raise ValueError(col_name(c) + ' not found in ' + col_name(carr))
 
+def ix_by_utc(u0, utc, verbose=True) :
+    """
+    get an index of utc into the day's existing daily_utc u0
+    For example, u0 = self._make_daily_utc(day, bar_sec)
+    return: an index of utc into u0, used for overwirte
+    """
+    ix0 = np.clip(np.searchsorted(u0, utc), 0, len(u0)-1)
+    zix = np.nonzero(u0[ix0] - utc == 0)[0]
+    if verbose :
+        print 'got %d (out of %d total) bars, mismatch %d'%(len(utc), len(u0), len(utc)-len(zix))
+    if len(zix) != len(utc) :
+        if verbose :
+            print 'missing: ', np.delete(np.arange(len(u0)), ix0[zix])
+            print 'not used:', np.delete(np.arange(len(ix0)), zix)
+        ix0=ix0[zix]
+    return ix0, zix
+
+def sync_lr_by_lpx(dbar, day, upd_col=None) :
+    """
+    when lpx is updated, the LR is updated accordingly.  
+    Note 1 the first LR is the over-night
+    LR, and is NOT updated. 
+    Note 2 repo will call this when only lpx is updated or overwritten without lr.
+    upd_col: if None, always recalculate lr based on lpx of the day, except the first lr
+             if not None, then it checks if 'lpx' in upd_col without 'lr'. 
+             Only recalculate lr if the condition is true
+    """
+    if upd_col is not None:
+        if 'lpx' not in col_name(upd_col) or 'lr' in col_name(upd_col) :
+            return
+        else :
+            print 'lpx updated but not lr, lr to be recalculated',
+    print 'update lr based on lpx!'
+    bar, col, bs = dbar.load_day(day)
+    lpx_hist = bar[:, col_idx('lpx')]
+    u0 = bar[:, col_idx('utc')]
+    lr = bar[:, col_idx('lr')]
+    # don't update the over-night lr
+    lr[1:] = np.log(lpx_hist[1:])-np.log(lpx_hist[:-1])
+
+    try :
+        lr = lr.reshape((len(u0), 1))
+        col = col_idx(['lr'])
+        dbar.overwrite([lr], [day], [col], bs)
+    except :
+        traceback.print_exc()
+
 class RepoDailyBar :
     @staticmethod
     def make_bootstrap_idx(symbol) :
@@ -192,7 +240,7 @@ class RepoDailyBar :
                     continue
                 rb = b
                 bs = bar_sec
-                col = c
+                col = copy.deepcopy(c)
             else :             # add only new columns
                 print ' found ', len(rb), ' bars (', bs, 'S), col: ', col_name(col), 
                 if bs != bar_sec :
@@ -216,6 +264,7 @@ class RepoDailyBar :
 
             # writing back to daily
             self._dump_day(d, rb, col, bs)
+            sync_lr_by_lpx(self, d, upd_col=c)
         print 'Done'
 
     def overwrite(self, bar_arr, day_arr, col_arr, bar_sec, rowix = None, utcix = None) :
@@ -232,6 +281,13 @@ class RepoDailyBar :
         aggree with the totbars, just as update() above. 
         Refer to update()
         """
+
+        for b,c, d in zip(bar_arr,col_arr, day_arr) :
+            if len(b.shape) < 2 :
+                raise ValueError('bar array of ' +  d + ' need to have 2D')
+            if b.shape[1] != len(c) :
+                raise ValueError('bar array of ' + d + ' dim mismatch with col_arr' + str(c))
+
         totbars = self._get_totalbars(bar_sec)
         if rowix is None :
             if utcix is None :
@@ -241,13 +297,7 @@ class RepoDailyBar :
                 barr = []
                 for day, uix, ba in zip(day_arr, utcix, bar_arr) :
                     u0 = self._make_daily_utc(day, bar_sec)
-                    ix0 = np.clip(np.searchsorted(u0, uix), 0, len(u0)-1)
-                    zix = np.nonzero(u0[ix0] - uix == 0)[0]
-                    print 'overwrite %s, total bar %d, len(utcix)=%d, mismatch %d'%( day, totbars, len(uix), len(uix)-len(zix))
-                    if len(zix) != len(uix) :
-                        print 'missing: ', np.delete(np.arange(len(u0)), ix0[zix])
-                        print 'not used:', np.delete(np.arange(len(ix0)), zix)
-                        ix0=ix0[zix]
+                    ix0, zix = ix_by_utc(u0, uix)
                     rowix.append(ix0)
                     barr.append(ba[zix,:])
                 bar_arr = barr
@@ -287,11 +337,12 @@ class RepoDailyBar :
                 print ' NO bars found, adding all columns as new! '
                 if len(rix) != totbars :
                     raise ValueError('rix not equal to totbars for adding column ' + str(len(rix)))
-                col = c
+                col = copy.deepcopy(c)
                 rb = b
                 bs = bar_sec
 
             self._dump_day(d, rb, col, bs)
+            sync_lr_by_lpx(self, d, upd_col=c)
 
     def daily_bar(self, start_day, day_cnt, bar_sec, end_day=None, cols=[utcc,lrc,volc,vbsc,lpxc], group_days = 5) :
         """
