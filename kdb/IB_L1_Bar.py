@@ -300,11 +300,15 @@ class L1Bar :
         #self.dbar.overwrite([ow_arr[1:, :]], [day], [ow_cols], self.bar_sec, utcix=[utc[1:]])
         self.dbar.overwrite([ow_arr[1:, :]], [day], [ow_cols], self.bar_sec, rowix=[utcix[1:]])
 
-        # need to fill-in zeros on missing bars of the day
+        # upd_arr col: ['spd', 'bs', 'as', 'qbc', 'qac', 'tbc', 'tsc', 'ism1']
+        # 'spd' needs to fill back/forward
+        # ism1 needs to fill with mid
+        # all other columns need to fill-in zeros on missing bars of the day
         upc = np.zeros((len(u0), len(upd_cols)))
         upc[utcix, :] = upd_arr
-        # 'spd' and 'ism1' needs to fill back/forward
-        for i in [0, -1] :
+
+        # 'spd' needs to fill back/forward
+        for i in [0] : 
             d = upc[:, i]
             ix = np.nonzero(d==0)[0]
             d[ix]=np.nan
@@ -312,6 +316,14 @@ class L1Bar :
             df.fillna(method='ffill',inplace=True)
             df.fillna(method='bfill',inplace=True)
 
+        # ism1 needs to fill with mid
+        bar, col, bs = self.dbar.load_day(day)
+        lpx = bar[:, repo.col_idx('lpx')]
+        ix = np.nonzero(upc[:, -1]==0)[0]
+        upc[ix, -1] = lpx[ix]
+
+        # use overwriting onto the columns for the whole day
+        # because update doesn't allow onto existing columns
         self.dbar.overwrite([upc], [day], [upd_cols], self.bar_sec)
         #self.dbar.update([upc], [day], [upd_cols], self.bar_sec)
 
@@ -502,6 +514,97 @@ class L1Bar :
             ecols = np.delete(ecols, remove_ix, axis=0)
 
         return day, tcol, bcols, ecols
+
+
+###
+# Some verification scripts
+###
+def verify_lpx_lr_vol_vbs_ism(bar, bar5, uarr, barr, earr, day):
+    """
+    bar is the repo.dbar.load_day(day) on only IB_hist data
+    bar5 is the repo.dbar.load_day(day) after applying the l1 updates
+    uarr, barr, earr is the l1bar.read() without updating the repo
+
+    This is to plot the differences of IB history, l1 bars and
+    the repo after l1 bar updates
+    """
+    f=5
+
+    import matplotlib.pyplot as pl
+    fig=pl.figure()
+    ax1=fig.add_subplot(f,1,1)
+    ax1.plot(bar[:, 0], bar[:, repo.col_idx('lpx')],'.-', label='hist lpx')
+    ax1.plot(uarr, barr[:, -1],                            label='l1 mid'  )
+    ax1.plot(bar5[:, 0], bar5[: , repo.col_idx('lpx')],   label='repo lpx')
+    ax1.plot(bar5[:, 0], bar5[:, repo.col_idx('ism1')],  label='repo ism1')
+    ax1.legend() ; ax1.grid()
+    ax1.set_title('verify ' + day)
+    
+    ax2 = fig.add_subplot(f,1,2,sharex=ax1)
+    ax2.plot(bar[:, 0], np.cumsum(bar[:, repo.col_idx('vol')]), '.-',    label='hist vol')
+    ax2.plot(bar5[:, 0], np.cumsum(bar5[:, repo.col_idx('vol')]), 'g-',  label='repo vol')
+    ax2.legend() ; ax2.grid()
+    
+    ax3 = fig.add_subplot(f,1,3,sharex=ax1)
+    ax3.plot(bar[:, 0], np.cumsum(bar[:, repo.col_idx('vbs')]), '.-',    label='hist vbs')
+    ax3.plot(uarr, np.cumsum(barr[:, 1]), '.-',                          label='l1 vbs')
+    ax3.plot(bar5[:, 0], np.cumsum(bar5[:, repo.col_idx('vbs')]), 'g-',  label='repo vbs')
+    ax3.legend() ; ax3.grid()
+    
+    ax4 = fig.add_subplot(f,1,4,sharex=ax1)
+    ax4.plot( uarr, np.cumsum(barr[:, 3]-barr[:, 4]), '.-',                                     label='l1 cumsum(bs-as)')
+    ax4.plot(bar5[:, 0], np.cumsum( bar5[:, repo.col_idx('bs')] - bar5[:, repo.col_idx('as')]), label='repo cumsum(bs-as)')
+    ax4.legend() ; ax4.grid()
+
+    ax5 = fig.add_subplot(f, 1,5,sharex=ax1)
+    ax5.plot(uarr,np.cumsum(earr[:, 2]-earr[:,3]), '.-',                                 label='l1 cumsum(tbc-tas)')
+    ax5.plot(uarr,np.cumsum(earr[:, 0]-earr[:,1]), '.-',                                 label='l1 cumsum(qbc-qac)')
+    ax5.plot(bar5[:, 0], np.cumsum( bar5[:, repo.col_idx('tbc')] - bar5[:, repo.col_idx('tsc')]), label='repo cumsum(tbc-tsc)')
+    ax5.plot(bar5[:, 0], np.cumsum( bar5[:, repo.col_idx('qbc')] - bar5[:, repo.col_idx('qac')]), label='repo cumsum(qbc-qac)')
+    ax5.legend() ; ax5.grid()
+
+def test_l1(bar_file='bar/20180727/NYM_CL_B1S.csv', hist_load_date = None, symbol = 'CL', repo_path='repo_test', bs=1) :
+    """
+    need to run at the kisco root path 
+    if hist_load_date is not None, it should be a [start_day, end_day] for the repo to be loaded with IB Histroy
+       This is only needed for initialization.  Typically you can save a directory of repo and use
+       rm -fR and cp -fR to achieve this
+    """
+    if hist_load_date is not None :
+        print 'create repo ', repo_path, ' and load history dates: ', hist_load_date
+        import os
+        import IB_hist as ibhist
+        os.system('mkdir -p ' + repo_path + ' > /dev/null 2>&1')
+        dbar = repo.RepoDailyBar(symbol, repo_path=repo_path, create=True)
+        try :
+            ibhist.gen_daily_bar_ib(symbol, hist_load_date[0], hist_load_date[1],bs,dbar_repo=dbar, get_missing=False)
+        except :
+            pass
+    else :
+        print 'using existing repo at ', repo_path
+        dbar = repo.RepoDailyBar(symbol, repo_path=repo_path)
+
+    # read l1 updates from L1 Bar file
+    l1bar = L1Bar(symbol,bar_file, None)
+    darr, uarr, barr, earr = l1bar.read()
+
+    # save history bar without l1 updates
+    bars = []
+    for d in darr :
+        bar, col, bs = dbar.load_day(d)
+        bars.append(copy.deepcopy(bar))
+
+    # update repo with l1 and save to bar5
+    bar5s=[]
+    l1bar2 = L1Bar(symbol,bar_file, dbar)
+    darr2, uarr2, barr2, earr2 = l1bar2.read()
+    for d in darr :
+        bar5, col, bs = dbar.load_day(d)
+        bar5s.append(copy.deepcopy(bar5))
+
+    # ready to go
+    for bar, bar5, d, ua, ba, ea in zip(bars, bar5s, darr, uarr, barr, earr) :
+        verify_lpx_lr_vol_vbs_ism(bar, bar5, ua, ba, ea, d)
 
 def read_l1(bar_file) :
     b = np.genfromtxt(bar_path, delimiter=',', use_cols=[0,1,2,3,4,5,6])

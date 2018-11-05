@@ -370,7 +370,7 @@ def fn_from_dates(symbol, sday, eday, is_front_future, is_fx) :
         fns = np.delete(fns, ix+1)
     return fns
 
-def gen_daily_bar_ib(symbol, sday, eday, bar_sec, check_only=False, dbar_repo=None, is_front_future=True, is_fx = False) :
+def gen_daily_bar_ib(symbol, sday, eday, bar_sec, check_only=False, dbar_repo=None, is_front_future=True, is_fx = False, get_missing=True) :
     """
     generate IB dily bars from sday to eday.
     It is intended to be used to add too the daily bar repo manually
@@ -402,7 +402,7 @@ def gen_daily_bar_ib(symbol, sday, eday, bar_sec, check_only=False, dbar_repo=No
 
     print 'Done!'
 
-    if dbar_repo is not None :
+    if get_missing and dbar_repo is not None :
         print 'getting the missing days ', tda_bad
         import ibbar
         reload(ibbar)

@@ -57,7 +57,6 @@ import traceback
 
 ###  Be very careful aboout the columns, 
 ###  ONLY ADD, NEVER DELETE
-###  
 hist_col=['utc', 'lr', 'vol', 'vbs', 'lrhl', 'vwap', 'ltt', 'lpx']
 l1bar_col=['spd', 'bs', 'as', 'qbc', 'qac', 'tbc', 'tsc', 'ism1']
 all_col=hist_col+l1bar_col
