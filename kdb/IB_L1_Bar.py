@@ -75,7 +75,13 @@ class L1Bar :
         self.symbol = symbol
         self.hours = l1.get_start_end_hour(symbol)
         self.bar_file = bar_file
-        self.f = open(bar_file, 'r')
+        if bar_file[-3:] == '.gz' :
+            os.system('gunzip ' + bar_file)
+            self.bar_file = bar_file[:-3]
+            self.gzip = True
+        else :
+            self.gzip = False
+        self.f = open(self.bar_file, 'r')
         self.dbar = dbar_repo
 
         # the time shifting start/stops, see Note 1
@@ -121,6 +127,8 @@ class L1Bar :
                 else :
                     break
 
+        if self.gzip :
+            os.system('gzip ' + self.bar_file)
         return darr, np.array(uarr), np.array(barr), np.array(earr)
 
     def _best_shift_multi_seg(self, lpx_hist0, lpx_mid0, startix=0, endix=-1, verbose = True) :
@@ -282,9 +290,9 @@ class L1Bar :
 
             # readjust the utcix and zix
             utcix, zix = repo.ix_by_utc(u0, utc, verbose=False)
-            if len(zix) != len(utcix) :
+            if len(zix) != len(utc) :
                 print 'removing ix after adjusting utc, ',
-                print 'some ix moved out of daily utc: len(utc)=%d, len(zix)=%d'%(len(utcix), len(zix))
+                print 'some ix moved out of daily utc: len(utc)=%d, len(zix)=%d'%(len(utc), len(zix))
                 utc=utc[zix]
                 ow_arr=ow_arr[zix, :]
                 upd_arr=upd_arr[zix,:]
@@ -373,6 +381,13 @@ class L1Bar :
         if len(cols) < 13:
             return None
 
+        ism1 = cols[12]
+        if ism1 > 1e+7 or ism1 < 0 or \
+            cols[8] < 0 or cols[9] < 0 or \
+            cols[10] < 0 or cols[11] < 0 or \
+            cols[8] > 1e+7 or cols[9] > 1e+7 or cols[10]>1e+7 or cols[11]>1e+7 :
+                print 'Found bad value in ext column, set to 0: ', [cols[8], cols[9], cols[10], cols[11], cols[12]]
+                return [0,0,0,0,0]
         return [cols[8], cols[9], cols[10], cols[11], cols[12]]
 
     def _is_missing(self, utc, ext) :
