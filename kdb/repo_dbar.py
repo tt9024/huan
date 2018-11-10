@@ -422,7 +422,10 @@ class RepoDailyBar :
         return bar, col, bs
 
     def remove_day(self, day) :
-        self.idx['daily'].pop(day)
+        ret=self.idx['daily'].pop(day)
+        if ret is None :
+            print 'day ', day, ' not found, not removed'
+            return
         os.system('rm -fR ' + self.path+'/daily/'+day)
         np.savez_compressed(self.idxfn, idx=self.idx)
 
