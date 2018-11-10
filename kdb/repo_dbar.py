@@ -421,6 +421,11 @@ class RepoDailyBar :
         assert self._get_totalbars(bs) == len(bar), bfn + ' wrong size: '+str(len(bar)) + ' should  be  ' + str(self._get_totalbars(bs))
         return bar, col, bs
 
+    def remove_day(self, day) :
+        self.idx['daily'].pop(day)
+        os.system('rm -fR ' + self.path+'/daily/'+day)
+        np.savez_compressed(self.idxfn, idx=self.idx)
+
     def _dump_day(self, day, bar, col, bar_sec) :
         """
         update self.index

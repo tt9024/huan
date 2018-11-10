@@ -199,7 +199,10 @@ ven_sym_map={'NYM':['CL','NG','HO','RB','GC','SI','HG','PA'], \
                     'EUR.CAD','EUR.CHF','EUR.GBP','EUR.JPY','EUR.NOK',\
                     'EUR.SEK','EUR.TRY','EUR.ZAR','GBP.CHF','GBP.JPY',\
                     'NOK.SEK','NZD.JPY','EUR.USD','USD.ZAR','USD.TRY',\
-                    'USD.MXN','USD.CNH','XAU.USD','XAG.USD'],\
+                    'USD.MXN','USD.CNH','XAU.USD','XAG.USD', \
+                    'AUD.USD','EUR.USD','GBP.USD','NZD.USD','USD.JPY',\
+                    'USD.CAD','USD.NOK','USD.SEK','USD.CHF','USD.RUB',\
+                    'GBP.AUD', 'GBP.CAD','GBP.NOK','GBP.CHF','GBP.CNH'],\
              'ETF':['EEM','EPI','EWJ','EWZ','EZU','FXI','GDX','ITB','KRE','QQQ','RSX','SPY','UGAZ','USO','VEA','VXX','XLE','XLF','XLK','XLU','XOP'],\
              'ICE':['LCO','LFU','LOU'], \
              'NYBOT':['CC','CT','SB','KC']};

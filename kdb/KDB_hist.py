@@ -200,7 +200,23 @@ def write_daily_bar(symbol,bar,bar_sec=5,old_cl_repo=None) :
 
 def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path='.', old_cl_repo = None) :
     year =  str(year)  # expects a string
-    fn=glob.glob(kdb_hist_path + '/' + symbol+'/'+symbol+'??_[12]*.csv*')
+
+    venue_path = ''
+    symbol_path = symbol
+    venue = l1.venue_by_symbol(symbol)
+    if venue == 'FX' :
+        venue_path = 'FX/'
+        symbol_path = symbol.replace('.', '')
+        if 'USD' in symbol_path :
+            symbol_path = symbol_path.replace('USD','')
+        else :
+            symbol_path = symbol_path + 'R'
+    elif venue == 'ETF' :
+        venue_path = 'ETF/'
+    elif venue == 'FXFI' :
+        venue_path = 'FXFI/'
+
+    fn=glob.glob(kdb_hist_path + '/' + venue_path + symbol_path+'/'+symbol+'??_[12]*.csv*')
 
     ds=[]
     de=[]
@@ -252,14 +268,14 @@ def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path
 
     return bar_lr, td_arr, col_arr
 
-def gen_bar(symbol, year_s=1998, year_e=2018, check_only=False, repo=None, kdb_hist_path = '/cygdrive/e/kdb', old_cl_repo = None) :
+def gen_bar(symbol, year_s=1998, year_e=2018, check_only=False, repo=None, kdb_hist_path = '/cygdrive/e/kdb', old_cl_repo = None, bar_sec=5) :
     ba=[]
     td=[]
     col=[]
     years=np.arange(year_s, year_e+1)
     for y in years :
         try :
-            barlr, td_arr, col_arr=gen_bar0(symbol,str(y),check_only=check_only, kdb_hist_path = kdb_hist_path, old_cl_repo=old_cl_repo)
+            barlr, td_arr, col_arr=gen_bar0(symbol,str(y),check_only=check_only, kdb_hist_path = kdb_hist_path, bar_sec=bar_sec, old_cl_repo=old_cl_repo)
             if len(barlr) > 0 :
                 ba+=barlr
                 td+=td_arr
@@ -272,15 +288,15 @@ def gen_bar(symbol, year_s=1998, year_e=2018, check_only=False, repo=None, kdb_h
         return
 
     if repo is not None :
-        repo.update(ba, td, col)
+        repo.update(ba, td, col, bar_sec)
     return ba, td, col
 
 def fix_days_from_old_cl_repo(td, sday, eday, old_cl_repo) :
-   """
-   Some days doesn't have history file, or lost in the backup
-   so getting them fro the old 5s_repo
-   This only applies to CL
-   """
+    """
+    Some days doesn't have history file, or lost in the backup
+    so getting them fro the old 5s_repo
+    This only applies to CL
+    """
     ti = l1.TradingDayIterator(sday)
     day1 = ti.yyyymmdd()
     barr = []
