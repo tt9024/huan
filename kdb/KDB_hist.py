@@ -200,23 +200,32 @@ def write_daily_bar(symbol,bar,bar_sec=5,old_cl_repo=None) :
 
 def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path='.', old_cl_repo = None) :
     year =  str(year)  # expects a string
-
     venue_path = ''
     symbol_path = symbol
     venue = l1.venue_by_symbol(symbol)
+    sym = symbol
     if venue == 'FX' :
         venue_path = 'FX/'
-        symbol_path = symbol.replace('.', '')
+        symbol_path = sym.replace('.', '')
         if 'USD' in symbol_path :
             symbol_path = symbol_path.replace('USD','')
+            sym = symbol_path+'='
         else :
-            symbol_path = symbol_path + 'R'
+            sym = symbol_path + '=R'
+            symbol_path = symbol_path+'R'
     elif venue == 'ETF' :
         venue_path = 'ETF/'
     elif venue == 'FXFI' :
         venue_path = 'FXFI/'
+    elif sym in l1.RicMap.keys() :
+        symbol_path = symbol
+        sym = l1.RicMap[symbol]
+    elif symbol in ['ZB', 'ZN', 'ZF'] :
+        m0 = {'ZB':'US', 'ZN':'TY', 'ZF':'FV'}
+        symbol_path = m0[symbol]
+        sym = m0[symbol]
 
-    fn=glob.glob(kdb_hist_path + '/' + venue_path + symbol_path+'/'+symbol+'??_[12]*.csv*')
+    fn=glob.glob(kdb_hist_path + '/' + venue_path + symbol_path+'/'+sym+'??_[12]*.csv*')
 
     ds=[]
     de=[]
@@ -268,6 +277,7 @@ def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path
 
     return bar_lr, td_arr, col_arr
 
+
 def gen_bar(symbol, year_s=1998, year_e=2018, check_only=False, repo=None, kdb_hist_path = '/cygdrive/e/kdb', old_cl_repo = None, bar_sec=5) :
     ba=[]
     td=[]
@@ -289,7 +299,20 @@ def gen_bar(symbol, year_s=1998, year_e=2018, check_only=False, repo=None, kdb_h
 
     if repo is not None :
         repo.update(ba, td, col, bar_sec)
-    return ba, td, col
+
+    # generate a bad day list 
+    sday = td[0]
+    eday = td[-1]
+    diter = l1.TradingDayIterator(sday)
+    day=diter.yyyymmdd()
+    bday = []
+    while day <= eday :
+        if day not in td :
+            bday.append(day)
+        diter.next()
+        day = diter.yyyymmdd()
+
+    return ba, td, col, bday
 
 def fix_days_from_old_cl_repo(td, sday, eday, old_cl_repo) :
     """
@@ -328,3 +351,4 @@ def fix_days_from_old_cl_repo(td, sday, eday, old_cl_repo) :
         ti.next()
         day1=ti.yyyymmdd()
     return barr, tda, col
+

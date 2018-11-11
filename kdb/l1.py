@@ -182,9 +182,23 @@ RollDates = {'CL':  [MonthlyFrontContract,   [16, 16, 16, 16, 16, 16, 16, 16, 16
 
 FXFutures = ['6A','6B','6C','6E','6J','6M','6N','6Z','6R','AD','BP','CD','URO','JY','MP','NE']
 RicMap = {'6A':'AD', '6B':'BP', '6C':'CD', '6E':'URO', '6J':'JY', '6M':'MP', '6N':'NE','ZC':'C'}
-ICEFutures = ['LCO','LFU','LOU']
 # todo: fill this map
-SymbolTicks = {'CL':0.01, 'ES':0.25, 'NG':0.001, 'LCO':0.01, 'LFU':0.25, 'LOU':0.0001, 'HO':0.0001}
+SymbolTicks = {'CL':0.01, 'NG':0.001, 'HO':0.0001, 'RB':0.0001, 'GC':0.1, 'SI':0.001, 'HG':0.0005, 'PA':0.1, \
+               'ES':0.25, 'HE':0.00025, 'LE':0.00025, 'GE': 0.0025, \
+               '6A':0.00005, '6C':0.00005, '6E':0.00005, '6B':0.0001, '6J':0.0000005, '6N':0.00005, '6R':0.000005, '6Z':0.000025, '6M':0.00001, \
+               'ZB':0.03125, 'ZN':0.015625,'ZF':0.0078125, 'ZC':0.0025, 'ZS':0.0025, 'ZL':0.0001,'ZM':0.1, 'ZW':0.0025, \
+               'FDX':0.5, 'STXE':1, 'FGBX':0.02, 'FGBL':0.01, 'FGBS':0.005,'FGBM':0.01, \
+               'LCO':0.01, 'LFU':0.25, 'LOU':0.0001, \
+               'CC':1 ,'CT':0.01,'SB':0.01,'KC':0.05 \
+               }
+SymbolMul= { 'CL':1000, 'NG':10000, 'HO':42000, 'RB': 42000, 'GC': 100, 'SI':5000, 'HG': 25000, 'PA': 100, \
+             'ES':50, 'HE':40000, 'LE':40000, 'GE': 2500, \
+             '6A':100000, '6C':100000, '6E':125000, '6B':62500, '6J':12500000, '6N':100000, '6R':2500000, '6Z':500000, '6M':500000, \
+             'ZB':1000, 'ZN': 1000, 'ZF':1000, 'ZC':5000 ,'ZS':5000, 'ZL':60000, 'ZM':100 ,'ZW:5000' \
+             'FDX':25, 'STXE':10,'FGBX':1000, 'FGBL':1000 ,'FGBS':1000, 'FGBM':1000, \
+             'LCO':1000, 'LFU':100, 'LOU':42000, \
+             'CC':10, 'CT':500,'SB':1120,'KC':375 \
+           }
 
 #######################################################################
 ## !!! Be very careful about changin the following ven_sym_map and
@@ -205,6 +219,7 @@ ven_sym_map={'NYM':['CL','NG','HO','RB','GC','SI','HG','PA'], \
                     'GBP.AUD', 'GBP.CAD','GBP.NOK','GBP.CHF','GBP.CNH'],\
              'ETF':['EEM','EPI','EWJ','EWZ','EZU','FXI','GDX','ITB','KRE','QQQ','RSX','SPY','UGAZ','USO','VEA','VXX','XLE','XLF','XLK','XLU','XOP'],\
              'ICE':['LCO','LFU','LOU'], \
+             # NYBOT no permission from IB yet 
              'NYBOT':['CC','CT','SB','KC']};
 
 ICEFutures = ven_sym_map['ICE']
@@ -233,6 +248,19 @@ def get_start_end_hour(symbol) :
 
     #default Future and FX hours
     return -6, 17
+
+def asset_info(sym) :
+    """
+    returns the tick size and contract size of symbol
+    sym: defined in ven_sym_map, i.e. 'CL' or 'EUR.USD'
+    """
+    if sym in SymbolTicks.keys() :
+        return SymbolTicks[sym], SymbolMul[sym]
+    if venue_by_symbol(sym) == 'ETF' :
+        return 0.01, 100
+    if venue_by_symbol(sym) == 'FX' :
+        return 0.00001, 1000000
+    raise ValueError('unknown symbol ' + sym)
 
 ## At minimum, do not delete any of the definitions
 ## Adding should not be a problem
