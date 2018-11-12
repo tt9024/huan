@@ -198,7 +198,9 @@ def write_daily_bar(symbol,bar,bar_sec=5,old_cl_repo=None) :
 
     return barr, trade_days, col_arr
 
+kdb_future_symbols = ['6A',  '6B',  '6C',  '6E',  '6J',  '6M',  '6N',  'CL',  'ES', 'FDX',  'FGBL',  'FGBM',  'FGBS',  'FGBX',  'FV',  'FX', 'GC',  'HG',  'HO', 'LCO',  'NG',  'RB',  'SI',  'STXE',  'TY',  'US',  'ZC']
 kdb_fx_symbols = ['AUD',  'AUDJPYR',  'AUDNZDR',  'CAD',  'CNH',  'EUR',  'EURAUDR',  'EURGBPR',  'EURJPYR',  'EURNOKR',  'EURSEKR',  'GBP',  'JPY',  'MXN',  'NOKSEKR',  'NZD',  'SEK',  'TRY',  'XAU',  'ZAR']
+kdb_etf_symbols = l1.ven_sym_map['ETF']
 
 def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path='.', old_cl_repo = None) :
     year =  str(year)  # expects a string
@@ -364,4 +366,26 @@ def fix_days_from_old_cl_repo(td, sday, eday, old_cl_repo) :
         ti.next()
         day1=ti.yyyymmdd()
     return barr, tda, col
+
+def ingest_all_kdb_repo(kdb_path='/cygdrive/e/kdb', repo_path='/cygdrive/e/research/kdb/repo', all_sym=kdb_future_symbols + kdb_fx_symbols + kdb_etf_symbols, year_s=1998, year_e=2018) :
+    sym_arr = []
+    td_arr = []
+    tdbad_arr = []
+    for sym in all_sym:
+        db = None
+        if repo_path is not None :
+            db = repo.RepoDailyBar(sym, year_s, year_e, repo_path=repo_path, create=True)
+        try :
+            _, td, _, bd = gen_bar(sym, year_s, year_e, repo=db, kdb_hist_path=kdb_path)
+        except :
+            import traceback
+            traceback.print_exc()
+            print 'problem reading symbol ' + sym
+            continue
+        if len(td) > 0 :
+            sym_arr.append(sym)
+            td_arr.append(td)
+            tdbad_arr.append(bd)
+            np.savez_compressed('kdb_dump.npz', sym_arr=sym_arr, td_arr=td_arr, tdbad_arr=tdbad_arr)
+
 
