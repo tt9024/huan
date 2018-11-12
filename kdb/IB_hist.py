@@ -324,7 +324,8 @@ def bar_by_file_ib(fn,bid_ask_spd,bar_qt=None,bar_trd=None) :
 
 
 def get_future_spread(symbol) :
-    return l1.SymbolTicks[symbol]
+    tick, mul = l1.asset_info(symbol)
+    return tick
 
 
 def fn_from_dates(symbol, sday, eday, is_front_future, is_fx) :

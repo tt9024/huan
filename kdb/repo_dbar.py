@@ -151,7 +151,7 @@ class RepoDailyBar :
     @staticmethod
     def make_bootstrap_idx(symbol) :
         venue = l1.venue_by_symbol(symbol)
-        tick_size = l1.SymbolTicks[symbol]
+        tick_size, contract_size = l1.asset_info(symbol)
         start_hour, end_hour = l1.get_start_end_hour(symbol)
 
         idx = { 'global': \

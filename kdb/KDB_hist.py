@@ -198,14 +198,19 @@ def write_daily_bar(symbol,bar,bar_sec=5,old_cl_repo=None) :
 
     return barr, trade_days, col_arr
 
+kdb_fx_symbols = ['AUD',  'AUDJPYR',  'AUDNZDR',  'CAD',  'CNH',  'EUR',  'EURAUDR',  'EURGBPR',  'EURJPYR',  'EURNOKR',  'EURSEKR',  'GBP',  'JPY',  'MXN',  'NOKSEKR',  'NZD',  'SEK',  'TRY',  'XAU',  'ZAR']
+
 def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path='.', old_cl_repo = None) :
     year =  str(year)  # expects a string
     venue_path = ''
     symbol_path = symbol
     venue = l1.venue_by_symbol(symbol)
     sym = symbol
+    future_match='??'
+
     if venue == 'FX' :
         venue_path = 'FX/'
+        future_match=''
         symbol_path = sym.replace('.', '')
         if 'USD' in symbol_path :
             symbol_path = symbol_path.replace('USD','')
@@ -213,10 +218,14 @@ def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path
         else :
             sym = symbol_path + '=R'
             symbol_path = symbol_path+'R'
+        if symbol_path not in kdb_fx_symbols :
+            raise ValueError('FX Symbol '+symbol+' not found in KDB!')
     elif venue == 'ETF' :
         venue_path = 'ETF/'
+        future_match=''
     elif venue == 'FXFI' :
         venue_path = 'FXFI/'
+        future_match=''
     elif sym in l1.RicMap.keys() :
         symbol_path = symbol
         sym = l1.RicMap[symbol]
@@ -225,7 +234,7 @@ def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path
         symbol_path = m0[symbol]
         sym = m0[symbol]
 
-    fn=glob.glob(kdb_hist_path + '/' + venue_path + symbol_path+'/'+sym+'??_[12]*.csv*')
+    fn=glob.glob(kdb_hist_path + '/' + venue_path + symbol_path+'/'+sym+future_match+'_[12]*.csv*')
 
     ds=[]
     de=[]
@@ -296,6 +305,10 @@ def gen_bar(symbol, year_s=1998, year_e=2018, check_only=False, repo=None, kdb_h
 
     if check_only :
         return
+
+    if len(td) == 0 :
+        print 'nothing found for ', symbol, ' from ', year_s, ' to ', year_e
+        return [], [], [], []
 
     if repo is not None :
         repo.update(ba, td, col, bar_sec)
