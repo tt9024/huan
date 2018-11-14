@@ -621,10 +621,14 @@ def test_l1(bar_file='bar/20180727/NYM_CL_B1S.csv', hist_load_date = None, symbo
     for bar, bar5, d, ua, ba, ea in zip(bars, bar5s, darr, uarr, barr, earr) :
         verify_lpx_lr_vol_vbs_ism(bar, bar5, ua, ba, ea, d)
 
+bar_dir = [20180629,20180706,20180713,20180720,20180727,20180803,20180810,20180817,20180824,20180907,20180914,20180921,20180928,20181005,20181012,20181019,20181026,20181102,20181109]
+
 def read_l1(bar_file) :
     b = np.genfromtxt(bar_path, delimiter=',', use_cols=[0,1,2,3,4,5,6])
     # I need to get the row idx for each day for the columes of vbs and ism
     # which one is better?
     # I could use hist's trade for model, and l1/tick for execution
     pass
+
+
 

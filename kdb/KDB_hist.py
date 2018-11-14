@@ -236,7 +236,9 @@ def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path
         symbol_path = m0[symbol]
         sym = m0[symbol]
 
-    fn=glob.glob(kdb_hist_path + '/' + venue_path + symbol_path+'/'+sym+future_match+'_[12]*.csv*')
+    grep_str = kdb_hist_path + '/' + venue_path + symbol_path+'/'+sym+future_match+'_[12]*.csv*'
+    print 'grepping for file ', grep_str
+    fn=glob.glob(grep_str)
 
     ds=[]
     de=[]
@@ -269,7 +271,7 @@ def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path
     td_arr = []
     col_arr = []
     if len(fn0) == 0 :
-        return bar_lr
+        return [], [], []
     for f in fn :
         if f[-3:]=='.gz' :
             print 'gunzip ', f
