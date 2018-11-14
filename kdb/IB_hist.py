@@ -409,10 +409,15 @@ def gen_daily_bar_ib(symbol, sday, eday, bar_sec, check_only=False, dbar_repo=No
         reload(ibbar)
         fn = ibbar.get_missing_day(symbol, tda_bad, bar_sec, is_front_future, is_fx)
         for f in fn :
-            _,_,b=bar_by_file_ib(f,spread)
-            ba, td, col, bad_days = write_daily_bar(symbol, b,bar_sec=bar_sec,fill_missing=True)
-            if len(ba) > 0 :
-                dbar_repo.update(ba, td, col, bar_sec)
+            try :
+                _,_,b=bar_by_file_ib(f,spread)
+                if len(b) > 0 :
+                    ba, td, col, bad_days = write_daily_bar(symbol, b,bar_sec=bar_sec,fill_missing=True)
+                if len(ba) > 0 :
+                    dbar_repo.update(ba, td, col, bar_sec)
+            except :
+                traceback.print_exc()
+                print 'problem processing file ', f
 
     return baa, tda, cola, tda_bad
 
