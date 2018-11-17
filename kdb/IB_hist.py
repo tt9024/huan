@@ -328,8 +328,10 @@ def get_future_spread(symbol) :
     return tick
 
 
-def fn_from_dates(symbol, sday, eday, is_front_future, is_fx) :
-    if is_fx :
+def fn_from_dates(symbol, sday, eday, is_front_future, is_fx, is_etf) :
+    if is_etf :
+        fqt=glob.glob('hist/ETF/'+symbol+'_[12]*_qt.csv*')
+    elif is_fx :
         fqt=glob.glob('hist/FX/'+symbol+'_[12]*_qt.csv*')
     else :
         if is_front_future :
@@ -371,12 +373,12 @@ def fn_from_dates(symbol, sday, eday, is_front_future, is_fx) :
         fns = np.delete(fns, ix+1)
     return fns
 
-def gen_daily_bar_ib(symbol, sday, eday, bar_sec, check_only=False, dbar_repo=None, is_front_future=True, is_fx = False, get_missing=True) :
+def gen_daily_bar_ib(symbol, sday, eday, bar_sec, check_only=False, dbar_repo=None, is_front_future=True, is_fx = False, is_etf = False, get_missing=True) :
     """
     generate IB dily bars from sday to eday.
     It is intended to be used to add too the daily bar repo manually
     """
-    fn = fn_from_dates(symbol, sday, eday, is_front_future, is_fx)
+    fn = fn_from_dates(symbol, sday, eday, is_front_future, is_fx, is_etf)
     spread = get_future_spread(symbol)
     print 'Got ', len(fn), ' files: ', fn, ' spread: ', spread
 
@@ -421,32 +423,30 @@ def gen_daily_bar_ib(symbol, sday, eday, bar_sec, check_only=False, dbar_repo=No
 
     return baa, tda, cola, tda_bad
 
+def ingest_all_symb(sday, eday, repo_path, get_missing=False) :
+    import ibbar
+    fut_sym = ibbar.sym_priority_list
+    fx_sym = l1.ven_sym_map['FX']
+    etf_sym = ibbar.ib_sym_etf
+    fut_sym2 = ibbar.sym_priority_list_l1_next
+    
+    for sym in fut_sym[:1] :
+        barsec = 1
+        dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
+        gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_front_future=True, is_fx=False, get_missing = get_missing)
 
-def l1_bar(symbol, bar_path) :
-    b = np.genfromtxt(bar_path, delimiter=',', use_cols=[0,1,2,3,4,5,6])
-    # I need to get the row idx for each day for the columes of vbs and ism
-    # which one is better?
-    # I could use hist's trade for model, and l1/tick for execution
-    pass
+    for sym in fx_sym:
+        barsec = 5
+        dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
+        gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_fx=True, get_missing = get_missing)
 
-"""
-def gen_bar(symbol, year_s=1998, year_e=2018, check_only=False, ext_fields=True) :
-    ba=[]
-    years=np.arange(year_s, year_e+1)
-    for y in years :
-        try :
-            barlr=gen_bar0(symbol,str(y),check_only=check_only,ext_fields=ext_fields)
-            if len(barlr) > 0 :
-                ba.append(barlr)
-        except :
-            traceback.print_exc()
-            print 'problem getting ', y, ', continue...'
+    for sym in etf_sym :
+        barsec = 1
+        dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
+        gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_etf=True, get_missing = get_missing)
 
-    if check_only :
-        return
-    fn=symbol+'_bar_'+str(year_s)+'_'+str(year_e)
-    if ext_fields :
-        fn+='_ext'
-    np.savez_compressed(fn,bar=ba,years=years)
-"""
-
+    for sym in fut_sym2 :
+        barsec = 1
+        dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
+        gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_front_future=False, get_missing = get_missing)
+        

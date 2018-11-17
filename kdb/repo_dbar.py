@@ -367,8 +367,32 @@ class RepoDailyBar :
             ti=l1.TradingDayIterator(start_day)
             ti.next_n_trade_day(day_cnt-1)
             end_day = ti.yyyymmdd()
+
+        # getting the day count, removing initial and final missing days
+        ti = l1.TradingDayIterator(start_day)
+        day = ti.yyyymmdd()
+        darr = []
+        inarr = []
+        while day <= end_day :
+            darr.append(day)
+            if self.has_day(day) :
+                inarr.append(True)
+            else :
+                inarr.append(False)
+            ti.next()
+            day = ti.yyyymmdd()
+
+        ix = np.nonzero(inarr)[0]
+        if len(ix) == 0 :
+            raise ValueError('no bars found in repo! %s to %s!'%( start_day, end_day))
+        start_day = darr[ix[0]]
+        end_day = darr[ix[-1]]
+        day_cnt = ix[-1]-ix[0]+1
+        if day_cnt / group_days * group_days != day_cnt :
+            print '( Warning! group_days ' + str(group_days) + ' not multiple of ' + str(day_cnt) + ' adjustint...)', 
+            day_cnt = day_cnt/group_days * group_days
+            start_day = darr[ix[-1] - day_cnt +1]
         print day_cnt, ' days from ', start_day, ' to ', end_day
-        assert day_cnt / group_days * group_days == day_cnt, 'Error! group_days ' + str(group_days) + ' not multiple of ' + str(day_cnt)
 
         ti=l1.TradingDayIterator(start_day)
         day=ti.yyyymmdd()
@@ -399,6 +423,9 @@ class RepoDailyBar :
         bar = bar.reshape((d1, bar.shape[0]/d1, bar.shape[1]))
         return bar
 
+    def has_day(self, day) :
+        return day in self.idx['daily'].keys()
+
     def load_day(self, day) :
         """
         read a day from repo, files are stored in the day directory
@@ -407,7 +434,7 @@ class RepoDailyBar :
         """
         col = []
         bs = 0
-        if day in self.idx['daily'].keys() :
+        if self.has_day(day) :
             bs = self.idx['daily'][day]['bar_sec']
             col= list(copy.deepcopy(self.idx['daily'][day]['cols']))
             try :
