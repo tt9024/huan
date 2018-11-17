@@ -114,6 +114,21 @@ class TradingDayIterator :
     def cur_utc() :
         return TradingDayIterator.local_dt_to_utc(datetime.datetime.now(),True)
 
+def trd_day(utc=None) :
+    """
+    get trade day of utc. If none, gets the current day
+    return the trading day in yyyymmdd. 
+    After 17pm considered next trading day
+    """
+    if utc is None :
+        utc = TradingDayIterator.cur_utc()
+    dt = datetime.datetime.fromtimestamp(utc)
+    yyyymmdd = dt.strftime('%Y%m%d')
+    if dt.hour >= 17 :
+        it = TradingDayIterator(yyyymmdd, adj_start=False)
+        it.next()
+        yyyymmdd=it.yyyymmdd()
+    return yyyymmdd
 
 def tradinghour(dt) :
     """
@@ -142,7 +157,7 @@ Cotton2FrontContract =    ['H','H','K','K','N','N','Z','Z','Z','Z','Z','H']
 Suggar11FrontContract =   ['H','H','K','K','N','N','V','V','V','H','H','H']
 CoffeeFrontContract =     ['H','H','K','K','N','N','U','U','Z','Z','Z','H']
 
-RollDates = {'CL':  [MonthlyFrontContract,   [16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16]], \
+RollDates = {'CL':  [MonthlyFrontContract,   [14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14]], \
              'LCO': [MonthlyFrontContract,   [12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12]], \
              'LFU': [MonthlyFrontContract,   [12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12]], \
              'LOU': [MonthlyFrontContract,   [12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12]], \
@@ -298,6 +313,17 @@ def FC_ICE_new(symbol, yyyymmdd) :
             ys=str(y+1)[-1]
         return symbol+ms+ys
 
+def CL_ROLLDAY(yyyymmdd) :
+    """
+    CL roll dates was set to be day 16 of month up till 20181116
+    On the day the contract cannot trade on IB due to delivery on next Monday.
+    So starting from 20181117, RollDates['CL'] = 14. 
+    """
+    rd = RollDates['CL']
+    if yyyymmdd <= '20181116' :
+        rd = [MonthlyFrontContract,   [16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16]]
+    return rd
+
 def FC(symbol, yyyymmdd) :
     dt=datetime.datetime.strptime(yyyymmdd,'%Y%m%d')
     if symbol in ICEFutures :
@@ -312,7 +338,10 @@ def FC(symbol, yyyymmdd) :
         symbol=RicMap[symbol]
     if not RollDates.has_key(symbol0) :
         raise ValueError('symbol0 not in RollDates for ('+ symbol0 + ')' )
-    rd=RollDates[symbol0]
+    if symbol0 == 'CL' :
+        rd = CL_ROLLDAY(yyyymmdd)
+    else :
+        rd=RollDates[symbol0]
     ms=rd[0][dt.month-1]
     ys=dt.year%10
     if dt.day>rd[1][dt.month-1] :

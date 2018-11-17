@@ -225,6 +225,49 @@ def write_daily_bar(symbol, bar,bar_sec=5,last_close_px=None, fill_missing=False
 
     return barr, trade_days, col_arr, bad_trade_days
 
+
+def bar_by_file_ib_qtonly(fn) :
+    """ 
+    Mainly for FX, there is no trade, quote only in 5 second bar
+    _qt.csv expected to exist for the given fn
+    """
+
+    if fn[-3:] == '.gz' :
+        fn = fn[:-3]
+    if fn[-4:] == '.csv' :
+        fn = fn[:-7]
+    fnqt=fn+'_qt.csv'
+    print 'readig ', fn
+    # getting gzip if necessary
+    gz = False
+    f = fnqt
+    if l1.get_file_size(f) == 0 :
+        if l1.get_file_size(f+'.gz') > 0 :
+            print 'got gziped file ', f+'.gz', ' unzip it'
+            os.system('gunzip ' + f + '.gz')
+            gz = True
+        else :
+            raise ValueError('file not found: ' + f)
+
+    import pandas as pd
+    bar_qt=np.genfromtxt(fnqt, delimiter=',',usecols=[0,1,2,3,4]) #, dtype=[('utc','i8'),('open','<f8'),('high','<f8'),('low','<f8'),('close','<f8')])
+    nqt =  bar_qt.shape[0]
+    assert nqt > 3,  'too few bars found at ' + fn
+
+    qix=l1.get_inc_idx(bar_qt[:,0])
+    bar_qt = bar_qt[qix,:]
+    qts=bar_qt[:,0]
+    assert len(np.nonzero(qts[1:]-qts[:-1]<0)[0]) == 0, 'quote time stamp goes back'
+
+    ts = bar_qt[:, 0]
+    vwap = bar_qt[:, 4]
+    v = np.zeros((3, len(ts)))
+    bar=np.vstack((bar_qt[:,0],ts,bar_qt[:,1:5].T,vwap,v)).T
+    if gz : 
+        print 'gzip ' + f
+        os.system('gzip ' + f)
+    return bar
+
 def bar_by_file_ib(fn,bid_ask_spd,bar_qt=None,bar_trd=None) :
     """ 
     _qt.csv and _trd.csv are expected to exist for the given fn
@@ -390,7 +433,10 @@ def gen_daily_bar_ib(symbol, sday, eday, bar_sec, check_only=False, dbar_repo=No
     cola=[]
     tda_bad=[]
     for f in fn :
-        _,_,b=bar_by_file_ib(f,spread)
+        if is_fx :
+            b = bar_by_file_ib_qtonly(f)
+        else :
+            _,_,b=bar_by_file_ib(f,spread)
         ba, td, col, bad_days = write_daily_bar(symbol, b,bar_sec=bar_sec)
         baa+=ba
         tda+=td

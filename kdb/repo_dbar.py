@@ -3,6 +3,7 @@ import l1
 import copy
 import os
 import traceback
+import pandas as pd
 
 # This is the repository for storing
 # daily bars of all assets.  Each asset
@@ -119,7 +120,8 @@ def ix_by_utc(u0, utc, verbose=True) :
 
 def sync_lr_by_lpx(dbar, day, upd_col=None) :
     """
-    when lpx is updated, the LR is updated accordingly.  
+    when lpx is updated, the LR is updated accordingly. 
+    It is called after the upd_col has been written to the repo
     Note 1 the first LR is the over-night
     LR, and is NOT updated. 
     Note 2 repo will call this when only lpx is updated or overwritten without lr.
@@ -146,6 +148,25 @@ def sync_lr_by_lpx(dbar, day, upd_col=None) :
         dbar.overwrite([lr], [day], [col], bs)
     except :
         traceback.print_exc()
+
+def fwd_bck_fill(d0, v=0) :
+    """
+    backward and forward fill value in d that equals to v
+    Such as d = lpx, v = 0 for missing values
+    It works only for float values
+    """
+    if d0.dtype == np.dtype('int') :
+        d = d0.astype(float)
+    else :
+        d = d0
+    if v is not None :
+        ix = np.nonzero(d==v)[0]
+        d[ix]=np.nan
+    df=pd.DataFrame(d)
+    df.fillna(method='ffill',inplace=True)
+    df.fillna(method='bfill',inplace=True)
+    if d0.dtype == np.dtype('int') :
+        d0[:] = d.astype(int)
 
 class RepoDailyBar :
     @staticmethod

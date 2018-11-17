@@ -230,6 +230,42 @@ class L1Bar :
 
         return sharr[ix[0]]
         
+    def _copy_to_repo(self, day, utc, ow_arr, ow_cols, upd_arr, upd_cols) :
+        """
+        in case when repo doesn't have that day when L1 update is applied. 
+        This could happen if that day was not given by IB_hist nor KDB_hist. 
+        In this case, put everything in, fill in missing
+        Note 1 lpx in ow_arr,  spd and ism in upd_arr need to be forward 
+               and backward filled, other fields
+               can be filled with zero
+        Note 2 lr will be filled by repo automatically.  The overnight lr is 
+               lost.
+               TODO : set the overnight lr
+        """
+        u0 = self.dbar._make_daily_utc(day, self.bar_sec)
+        utcix, zix = repo.ix_by_utc(u0, utc, verbose=False)
+
+        # basic arr: [vol, vbs, lpx]
+        # lpx fwd_bck_fill, others fill 0
+        ow_arr0 = np.zeros((len(u0), len(ow_cols)))
+        ow_arr0[utcix, :] = ow_arr[zix, :]
+        ix = np.nonzero(np.array(ow_cols) == repo.col_idx('lpx'))[0]
+        # forward/backward fill lpx and ism1
+        if len(ix) == 1:
+            #forward and backward fill ix
+            repo.fwd_bck_fill(ow_arr0[:, ix[0]], v=0)
+        self.dbar.overwrite([ow_arr0], [day], [ow_cols], self.bar_sec)
+
+        # ext arr: [spd, qbc, qac, tbc, tsc, ism1], where
+        # spd and ism1 fwd_bck_fill, others fill 0
+        upd_arr0 = np.zeros((len(u0), len(upd_cols)))
+        upd_arr0[utcix, :] = upd_arr[zix, :]
+        for cn in ['spd', 'ism1'] :
+            ix = np.nonzero(np.array(ow_cols) == repo.col_idx(cn))[0]
+            if len(ix) == 1 :
+                repo.fwd_bck_fill(upd_arr0[:, ix[0]], v=0)
+        self.dbar.overwrite([upd_arr0], [day], [upd_cols], self.bar_sec)
+
     def _upd_repo(self, day, utc, bcols, ecols) :
         """
         update day to the daily bar repo
@@ -250,6 +286,13 @@ class L1Bar :
         since there could be missings in the live bar, the matching applies
         to the lpx/mid, the index could change.  Overwrite the mid/lpx/vol/vbs
         and reconstruct the LR based on the result mid
+
+        Note 4:
+        There could be mismatch in contract of L1 and IB_hist, or other
+        general data error that causes a consistent difference between
+        L1 price and IB_hist price.  This diff is defined with 
+        abs(mean(lpx-mid)) > 5 * ticks 
+        In this case, manual operation needed to resolve the conflict
         """
         ow_cols = repo.col_idx(['vol', 'vbs', 'lpx'])
         mid=bcols[:,-1]
@@ -261,6 +304,11 @@ class L1Bar :
             upd_arr = np.vstack((upd_arr.T, ecols.T)).T
 
         bar, col, bs = self.dbar.load_day(day)
+        if len(bar) == 0 :
+            print 'nothing found on ', day, ' write as a new day!'
+            self._copy_to_repo(day, utc, ow_arr, ow_cols, upd_arr, upd_cols)
+            return
+
         u0 = bar[:, repo.col_idx('utc')]
         utcix, zix = repo.ix_by_utc(u0, utc, verbose=False)
         utc=utc[zix]
@@ -306,6 +354,21 @@ class L1Bar :
                 upd_arr = np.delete(upd_arr, ixbad, axis=0)
             """
         #self.dbar.overwrite([ow_arr[1:, :]], [day], [ow_cols], self.bar_sec, utcix=[utc[1:]])
+
+        #########################################################################
+        # check for data errors
+        # raise exception if l1 data is off with lpx of the IB_hist by 5 ticks
+        # This is usually caused by contract mismatch in l1 and IB_hist data
+        # Unfortunately this needs attention to resolve the conflict
+        #########################################################################
+        if repo.col_idx('lpx') in col :
+            # check for potential mismatch
+            lpx = bar[utcix, repo.col_idx('lpx')]
+            mid = ow_arr[:, -1]
+            diff = np.abs(np.mean(lpx-mid))
+            if diff > l1.asset_info(self.symbol)[0] * 5 :
+                raise ValueError('contract mismatch on '+ day + ' for ' + self.symbol + ' diff ' + str(diff) + ' cnt ' + str(len(mid)))
+
         self.dbar.overwrite([ow_arr[1:, :]], [day], [ow_cols], self.bar_sec, rowix=[utcix[1:]])
 
         # upd_arr col: ['spd', 'bs', 'as', 'qbc', 'qac', 'tbc', 'tsc', 'ism1']
@@ -316,13 +379,7 @@ class L1Bar :
         upc[utcix, :] = upd_arr
 
         # 'spd' needs to fill back/forward
-        for i in [0] : 
-            d = upc[:, i]
-            ix = np.nonzero(d==0)[0]
-            d[ix]=np.nan
-            df=pd.DataFrame(d)
-            df.fillna(method='ffill',inplace=True)
-            df.fillna(method='bfill',inplace=True)
+        repo.fwd_bck_fill(upc[:,0],v=0)
 
         # ism1 needs to fill with mid
         bar, col, bs = self.dbar.load_day(day)
@@ -484,7 +541,7 @@ class L1Bar :
         # this is slightly complicated, as the bar will repeat
         # old price in case of disconnection (i.e. missing)
         # so we shouldn't include those stucked ticks in
-        if parse_ext is not None :
+        if parse_ext  :
             # check for the missing by detecting equals in ism and counts
             last_ism = 0
             last_eq = None
@@ -623,12 +680,30 @@ def test_l1(bar_file='bar/20180727/NYM_CL_B1S.csv', hist_load_date = None, symbo
 
 bar_dir = [20180629,20180706,20180713,20180720,20180727,20180803,20180810,20180817,20180824,20180907,20180914,20180921,20180928,20181005,20181012,20181019,20181026,20181102,20181109]
 
-def read_l1(bar_file) :
-    b = np.genfromtxt(bar_path, delimiter=',', use_cols=[0,1,2,3,4,5,6])
-    # I need to get the row idx for each day for the columes of vbs and ism
-    # which one is better?
-    # I could use hist's trade for model, and l1/tick for execution
-    pass
+def ingest_l1(symbol, bar_date_dir, repo_path=None, is_nc=False) :
+    """
+    read l1bar for symbol from bar_date_dir, i.e. NYM_CL_B1S.csv.gz
+    if repo_path is not None, update the repo for that symbol
+    if is_nc is True, then look for the next contract, i.e. NYM_CL_B1S_bc.csv.gz
+    NOTE: next contracts have different repo_path than front contract
+    """
+    fs = 'bar/'+bar_date_dir+'/*_'+symbol+'_B1S.csv*'
+    fn = glob.glob(fs)
+    if len(fn) != 1 :
+        print 'problem with ', symbol, ' in ', bar_date_dir, ' search: ', fs, ' got: ', fn
+        return
+    dbar = None 
+    if repo_path is not None :
+        dbar = repo.RepoDailyBar(symbol, repo_path=repo_path, create=True)
 
+    l1b = L1Bar(symbol, fn[0], dbar)
+    l1b.read()
 
+def ingest_all(bar_date_dir, repo_path=None, is_nc=False) :
+    fs = 'bar/'+bar_date_dir+'/*_B1S.csv*'
+    fn = glob.glob(fs)
+    for f in fn :
+        sym = f.split('/')[-1].split('_')[1]
+        print 'getting ', sym, ' from ', f
+        ingest_l1(sym, bar_date_dir, repo_path=repo_path, is_nc=is_nc)
 
