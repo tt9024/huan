@@ -376,7 +376,11 @@ def ingest_all_kdb_repo(kdb_path='/cygdrive/e/kdb', repo_path='/cygdrive/e/resea
     for sym in all_sym:
         db = None
         if repo_path is not None :
-            db = repo.RepoDailyBar(sym, year_s, year_e, repo_path=repo_path, create=True)
+            try :
+                db = repo.RepoDailyBar(sym, repo_path=repo_path)
+            except :
+                print 'creating repo for ', sym, ' repo_path ', repo_path
+                db = repo.RepoDailyBar(sym, repo_path=repo_path, create=True)
         try :
             _, td, _, bd = gen_bar(sym, year_s, year_e, repo=db, kdb_hist_path=kdb_path)
         except :
