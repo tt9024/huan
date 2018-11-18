@@ -255,7 +255,7 @@ def write_daily_bar(symbol,bar,bar_sec=5,old_cl_repo=None) :
 
     return barr, trade_days, col_arr
 
-kdb_future_symbols = ['6A',  '6B',  '6C',  '6E',  '6J',  '6M',  '6N',  'CL',  'ES', 'FDX',  'FGBL',  'FGBM',  'FGBS',  'FGBX',  'FV',  'FX', 'GC',  'HG',  'HO', 'LCO',  'NG',  'RB',  'SI',  'STXE',  'TY',  'US',  'ZC']
+kdb_future_symbols = ['6A',  '6B',  '6C',  '6E',  '6J',  '6M',  '6N',  'CL',  'ES', 'FDX',  'FGBL',  'FGBM',  'FGBS',  'FGBX',  'ZF',  'GC',  'HG',  'HO', 'LCO',  'NG',  'RB',  'SI',  'STXE',  'ZN',  'ZB',  'ZC']
 kdb_fx_symbols = ['AUD',  'AUDJPYR',  'AUDNZDR',  'CAD',  'CNH',  'EUR',  'EURAUDR',  'EURGBPR',  'EURJPYR',  'EURNOKR',  'EURSEKR',  'GBP',  'JPY',  'MXN',  'NOKSEKR',  'NZD',  'SEK',  'TRY',  'XAU',  'ZAR']
 kdb_etf_symbols = l1.ven_sym_map['ETF']
 
