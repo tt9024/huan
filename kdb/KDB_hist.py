@@ -7,7 +7,16 @@ import l1
 import repo_dbar as repo
 import os
 
-def bar_by_file(fn, skip_header=5) :
+def bar_by_file_future(fn, skip_header=5) :
+    """
+    volume can include block/manual trades that are not included in bvol and svol. 
+    The side of those trades are lost
+    date,ric,timeStart,lastTradeTickTime,open,high,low,close,avgPrice,vwap,volume,buyvol,sellvol
+    2017.11.22,CLF8,00:00:00.000,00:00:04.039,57.71,57.72,57.71,57.71,57.7107,57.7104,282,51,-44
+
+    Return:
+    [utc, utc_lt, open, high, low, close, vwap, vol, bvol, svol]
+    """
     bar_raw=np.genfromtxt(fn,delimiter=',',usecols=[0,2,3,4,5,6,7,9,10,11,12], skip_header=skip_header,dtype=[('day','|S12'),('bar_start','|S14'),('last_trade','|S14'),('open','<f8'),('high','<f8'),('low','<f8'),('close','<f8'),('vwap','<f8'),('volume','i8'),('bvol','i8'),('svol','i8')])
     bar=[]
     for b in bar_raw :
@@ -17,6 +26,54 @@ def bar_by_file(fn, skip_header=5) :
         utc_lt=float(l1.TradingDayIterator.local_dt_to_utc(dt))+float(b['last_trade'].split('.')[1])/1000.0
 
         bar0=[utc, utc_lt, b['open'],b['high'],b['low'],b['close'],b['vwap'],b['volume'],b['bvol'],b['svol']]
+        bar.append(bar0)
+
+    bar = np.array(bar)
+    open_px_col=2
+    ix=np.nonzero(np.isfinite(bar[:,open_px_col]))[0]
+    bar=bar[ix, :]
+    ix=np.argsort(bar[:, 0])
+    return bar[ix, :]
+
+def bar_by_file_etf(fn, skip_header=5) :
+    """
+    date(0),ric,timeStart(2),exchange_id,country_code,mic,lastTradeTickTime(6),open(7),high,low,close,avgPrice,vwap(12),minSize,maxSize,avgSize,avgLogSize,medianSize,volume(18),dolvol,cntChangePrice,cntTrade,cntUpticks,cntDownticks,sigma,buyvol(24),sellvol(25),buydolvol,selldolvol,cntBuy,cntSell,sideSigma,priceImpr,maxPriceImpr,dolimb,midvol,gmt_offset,lastQuoteTickTime,openBid(37),openAsk,highBid,highAsk,lowBid,lowAsk,closeBid,closeAsk,avgBid,avgAsk,minBidSize,minAskSize,maxBidSize,maxAskSize,avgBidSize,avgAskSize,avgLogBidSize,avgLogAskSize,avgSpread,cntChangeBid,cntChangeAsk,cntTick
+    2016.11.10,XLF,04:09:55.000,,,,04:09:57.092,20.99,20.99,20.98,20.98,20.985,20.985,100,100,100,4.60517,100,200,4197,1,2,0,1,0.005,0,-200,0,-4197,0,2,0,-1,200,-4197,0,-5,04:09:57.092,20.98,21.99,20.98,21.99,20.94,21.99,20.94,21.99,20.96,21.99,1,20,21,20,11,20,1.52226,2.99573,479.632,1,0,2
+
+    Return:
+    [utc, utc_lt, open, high, low, close, vwap, vol, bvol, svol]
+
+    Note 1:
+    All fields before gmt (-5) is empty if there were no trade in this bar period
+    NOte 2: 
+    volume may be larger than bvol + svol, same as Future
+    """
+
+    bar_raw=np.genfromtxt(fn,delimiter=',',usecols=[0,2,6,12,18,24,25, 37,38,39,40,41,42,43,44], skip_header=skip_header,\
+            dtype=[('day','|S12'),('bar_start','|S14'),('last_trade','|S14'),\
+                   ('vwap','<f8'),('volume','i8'),('bvol','i8'),('svol','i8'),\
+                   ('openbid','<f8'), ('openask','<f8'), ('highbid','<f8'), ('highask','<f8'),\
+                   ('lowbid','<f8'), ('lowask','<f8'), ('closebid','<f8'), ('closeask','<f8')])
+    bar=[]
+    # getting the first time stamp as starting utc_lt
+    dt=datetime.datetime.strptime(bar_raw[0]['day']+'.'+bar_raw[0]['bar_start'].split('.')[0],'%Y.%m.%d.%H:%M:%S')
+    utc_lt=float(l1.TradingDayIterator.local_dt_to_utc(dt)) - 5
+    for b in bar_raw :
+        dt=datetime.datetime.strptime(b['day']+'.'+b['bar_start'].split('.')[0],'%Y.%m.%d.%H:%M:%S')
+        utc=float(l1.TradingDayIterator.local_dt_to_utc(dt))
+        openpx = (b['openbid'] + b['openask'])/2
+        highpx = (b['highbid'] + b['highask'])/2
+        lowpx  = (b['lowbid']  + b['lowask' ])/2
+        closepx= (b['closebid']+ b['closeask'])/2
+        if b['volume'] == np.nan or b['volume'] is None :
+            b['volume'] = 0
+            b['vwap'] = closepx
+            b['bvol'] = 0
+            b['svol'] = 0
+        else :
+            dt_lt=datetime.datetime.strptime(b['day']+'.'+b['last_trade'].split('.')[0],'%Y.%m.%d.%H:%M:%S')
+            utc_lt=float(l1.TradingDayIterator.local_dt_to_utc(dt))+float(b['last_trade'].split('.')[1])/1000.0
+        bar0=[utc, utc_lt, openpx, highpx, lowpx, closepx, b['vwap'],b['volume'],b['bvol'],b['svol']]
         bar.append(bar0)
 
     bar = np.array(bar)
