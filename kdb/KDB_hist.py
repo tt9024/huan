@@ -7,7 +7,17 @@ import l1
 import repo_dbar as repo
 import os
 
-def bar_by_file_future(fn, skip_header=5) :
+def bar_by_file(fn, symbol) :
+    if symbol in kdb_future_symbols :
+        return bar_by_file_future(fn, skip_header=5)
+    elif symbol in kdb_etf_symbols :
+        return bar_by_file_etf(fn, skip_header=5)
+    elif symbol in kdb_fx_symbols :
+        return bar_by_file_fx(fn, skip_header=5)
+
+    raise ValueError('unknown symbol ' + symbol)
+
+def bar_by_file_future(fn, skip_header) :
     """
     volume can include block/manual trades that are not included in bvol and svol. 
     The side of those trades are lost
@@ -49,7 +59,7 @@ def bar_by_file_etf(fn, skip_header=5) :
     volume may be larger than bvol + svol, same as Future
     """
 
-    bar_raw=np.genfromtxt(fn,delimiter=',',usecols=[0,2,6,12,18,24,25, 37,38,39,40,41,42,43,44], skip_header=skip_header,\
+    bar_raw=np.genfromtxt(fn,delimiter=',',usecols=[0,2,6,12,18,24,25, 38,39,40,41,42,43,44,45], skip_header=skip_header,\
             dtype=[('day','|S12'),('bar_start','|S14'),('last_trade','|S14'),\
                    ('vwap','<f8'),('volume','i8'),('bvol','i8'),('svol','i8'),\
                    ('openbid','<f8'), ('openask','<f8'), ('highbid','<f8'), ('highask','<f8'),\
@@ -65,7 +75,7 @@ def bar_by_file_etf(fn, skip_header=5) :
         highpx = (b['highbid'] + b['highask'])/2
         lowpx  = (b['lowbid']  + b['lowask' ])/2
         closepx= (b['closebid']+ b['closeask'])/2
-        if b['volume'] == np.nan or b['volume'] is None :
+        if b['vwap'] == np.nan or b['volume'] == np.nan or b['volume'] is None or b['volume'] < 0:
             b['volume'] = 0
             b['vwap'] = closepx
             b['bvol'] = 0
@@ -77,7 +87,7 @@ def bar_by_file_etf(fn, skip_header=5) :
         bar.append(bar0)
 
     bar = np.array(bar)
-    open_px_col=2
+    open_px_col=5
     ix=np.nonzero(np.isfinite(bar[:,open_px_col]))[0]
     bar=bar[ix, :]
     ix=np.argsort(bar[:, 0])
@@ -339,7 +349,7 @@ def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path
                 print 'problem gunzip ', f, ' skipping'
                 continue
         print 'reading bar file ',f
-        b=bar_by_file(f)
+        b=bar_by_file(f, symbol)
         ba, td, col = write_daily_bar(symbol,b,bar_sec=bar_sec, old_cl_repo=old_cl_repo)
         bar_lr += ba  # appending daily bars
         td_arr += td
