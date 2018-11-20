@@ -17,6 +17,41 @@ def bar_by_file(fn, symbol) :
 
     raise ValueError('unknown symbol ' + symbol)
 
+def bar_by_file_fx(fn, skip_header) :
+    """
+    date,ric,timeStart,closeBid,closeAsk,avgSpread,cntTick
+    2014.02.06,AUD=,00:00:00.000,0.8926,0.8927,2.61415,3
+
+    Return:
+    [utc, utc_lt, open, high, low, close, vwap, vol, bvol, svol]
+
+    Note 1 :
+    No trade for FX, so vwap, vol, bvol, svol all zeros
+    utc_lt is always sod-1
+    
+    Note 2:
+    no open/hi/low prices, all equals to close price
+    """
+    bar_raw=np.genfromtxt(fn,delimiter=',',usecols=[0,2,3,4], skip_header=skip_header,dtype=[('day','|S12'),('bar_start','|S14'),('closebid','<f8'),('closeask', '<f8')])
+    bar=[]
+    dt=datetime.datetime.strptime(bar_raw[0]['day']+'.'+bar_raw[0]['bar_start'].split('.')[0],'%Y.%m.%d.%H:%M:%S')
+    utc_sod=float(l1.TradingDayIterator.local_dt_to_utc(dt))
+    for b in bar_raw :
+        dt=datetime.datetime.strptime(b['day']+'.'+b['bar_start'].split('.')[0],'%Y.%m.%d.%H:%M:%S')
+        utc=float(l1.TradingDayIterator.local_dt_to_utc(dt))
+        utc_lt = utc_sod-1
+
+        px = (b['closebid'] + b['closeask'])/2
+        bar0=[utc, utc_lt, px, px, px, px, px, 0, 0, 0]
+        bar.append(bar0)
+
+    bar = np.array(bar)
+    open_px_col=2
+    ix=np.nonzero(np.isfinite(bar[:,open_px_col]))[0]
+    bar=bar[ix, :]
+    ix=np.argsort(bar[:, 0])
+    return bar[ix, :]
+
 def bar_by_file_future(fn, skip_header) :
     """
     volume can include block/manual trades that are not included in bvol and svol. 
@@ -57,6 +92,14 @@ def bar_by_file_etf(fn, skip_header=5) :
     All fields before gmt (-5) is empty if there were no trade in this bar period
     NOte 2: 
     volume may be larger than bvol + svol, same as Future
+
+    Note 3:
+    The dividant and splits are not taken care of.  For example, XLF has a split on 20160916, the price in reuters kdb 
+    has a constant offset before 20160916, but seems to be good after that.  The overnight LR on 20160920 in this case is 15%, 
+    which should be removed by outlier. 
+
+    Note 4:
+    Eary days, i.e. 1998 - 2010, is quite noisy, especially the open tick.  outlier and cleaning is required.
     """
 
     bar_raw=np.genfromtxt(fn,delimiter=',',usecols=[0,2,6,12,18,24,25, 38,39,40,41,42,43,44,45], skip_header=skip_header,\
@@ -87,8 +130,8 @@ def bar_by_file_etf(fn, skip_header=5) :
         bar.append(bar0)
 
     bar = np.array(bar)
-    open_px_col=5
-    ix=np.nonzero(np.isfinite(bar[:,open_px_col]))[0]
+    vol_col=7
+    ix=np.nonzero(np.isfinite(bar[:,vol_col]))[0]
     bar=bar[ix, :]
     ix=np.argsort(bar[:, 0])
     return bar[ix, :]
@@ -266,7 +309,7 @@ def write_daily_bar(symbol,bar,bar_sec=5,old_cl_repo=None) :
     return barr, trade_days, col_arr
 
 kdb_future_symbols = ['6A',  '6B',  '6C',  '6E',  '6J',  '6M',  '6N',  'CL',  'ES', 'FDX',  'FGBL',  'FGBM',  'FGBS',  'FGBX',  'ZF',  'GC',  'HG',  'HO', 'LCO',  'NG',  'RB',  'SI',  'STXE',  'ZN',  'ZB',  'ZC']
-kdb_fx_symbols = ['AUD',  'AUDJPYR',  'AUDNZDR',  'CAD',  'CNH',  'EUR',  'EURAUDR',  'EURGBPR',  'EURJPYR',  'EURNOKR',  'EURSEKR',  'GBP',  'JPY',  'MXN',  'NOKSEKR',  'NZD',  'SEK',  'TRY',  'XAU',  'ZAR']
+kdb_fx_symbols = ['AUD.USD',  'AUD.JPY',  'AUD.NZD',  'USD.CAD',  'USD.CNH',  'EUR.USD',  'EUR.AUD',  'EUR.GBP',  'EUR.JPY',  'EUR.NOK',  'EUR.SEK',  'GBP.USD',  'USD.JPY',  'USD.MXN',  'NOK.SEK',  'NZD.USD',  'USD.SEK',  'USD.TRY',  'XAU.USD',  'ZAR.USD']
 kdb_etf_symbols = l1.ven_sym_map['ETF']
 
 def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path='.', old_cl_repo = None) :
@@ -276,8 +319,9 @@ def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path
     venue = l1.venue_by_symbol(symbol)
     sym = symbol
     future_match='??'
-
     if venue == 'FX' :
+        if symbol not in kdb_fx_symbols :
+            raise ValueError('FX Symbol '+symbol+' not found in KDB!')
         venue_path = 'FX/'
         future_match=''
         symbol_path = sym.replace('.', '')
@@ -287,8 +331,6 @@ def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path
         else :
             sym = symbol_path + '=R'
             symbol_path = symbol_path+'R'
-        if symbol_path not in kdb_fx_symbols :
-            raise ValueError('FX Symbol '+symbol+' not found in KDB!')
     elif venue == 'ETF' :
         venue_path = 'ETF/'
         future_match=''
@@ -339,6 +381,7 @@ def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path
     col_arr = []
     if len(fn0) == 0 :
         return [], [], []
+
     for f in fn :
         if f[-3:]=='.gz' :
             print 'gunzip ', f
@@ -354,6 +397,10 @@ def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path
         bar_lr += ba  # appending daily bars
         td_arr += td
         col_arr += col
+        try :
+            os.system('gzip ' + f)
+        except :
+            pass
 
     return bar_lr, td_arr, col_arr
 
