@@ -370,7 +370,9 @@ def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path
     # check that they don't overlap
     for dss0, des0, f0, f1 in zip(dss[1:], des[:-1], fn[1:], fn[:-1]):
         if des0>dss0 :
-            raise ValueError('time overlap! ' + '%s(%s)>%s(%s)'%(des0,f0,dss0,f1))
+            # just apply them!
+            #raise ValueError('time overlap! ' + '%s(%s)>%s(%s)'%(des0,f0,dss0,f1))
+            print 'time overlap! ' + '%s(%s)>%s(%s)'%(des0,f0,dss0,f1)
 
     if check_only :
         print year, ': ', len(fn0), ' files'
