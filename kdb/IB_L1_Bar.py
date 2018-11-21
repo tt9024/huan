@@ -686,12 +686,13 @@ def test_l1(bar_file='bar/20180727/NYM_CL_B1S.csv', hist_load_date = None, symbo
 
 bar_dir = [20180629,20180706,20180713,20180720,20180727,20180803,20180810,20180817,20180824,20180907,20180914,20180921,20180928,20181005,20181012,20181019,20181026,20181102,20181109]
 
-def ingest_all(bar_date_dir_list, repo_path='/cygdrive/e/research/kdb/repo') :
+def ingest_all(bar_date_dir_list, repo_path='/cygdrive/e/research/kdb/repo', sym_list=None) :
     """
     ingest all the symbols in bar_date_dir, including the future, fx, etf and future_nc
     for each *_B1S.csv* file: 
     read l1bar for symbol from bar_date_dir, i.e. NYM_CL_B1S.csv.gz
     if repo_path is not None, update the repo for that symbol. 
+    if sym_list is not None, then only these symbols are updated
     Note 1: future_nc has *_B1S_bc.csv*,  i.e. NYM_CL_B1S_bc.csv.gz
             and have different repo_path than front contract, 
             obtained by repo.nc_repo_path(repo_path), i.e. repo_nc
@@ -704,10 +705,17 @@ def ingest_all(bar_date_dir_list, repo_path='/cygdrive/e/research/kdb/repo') :
             fn = glob.glob(fs)
             for f in fn :
                 sym = f.split('/')[-1].split('_')[1]
+                if sym_list is not None and sym not in sym_list :
+                    print sym, ' not in ', sym_list, ' ignored. '
+                    continue
                 print 'getting ', sym, ' from ', f, ' repo_path ', rp
                 dbar = None
                 if rp is not None :
                     dbar = repo.RepoDailyBar(sym, repo_path=rp, create=True)
                 l1b = L1Bar(sym, f, dbar)
-                l1b.read()
+                try :
+                    l1b.read()
+                except :
+                    import traceback
+                    traceback.print_exc()
 
