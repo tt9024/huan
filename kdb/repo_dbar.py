@@ -168,6 +168,24 @@ def fwd_bck_fill(d0, v=0) :
     if d0.dtype == np.dtype('int') :
         d0[:] = d.astype(int)
 
+def nc_repo_path(repo_path) :
+    """
+    get the repo_path of the back contracts of a future symbol
+    repo_path: the path to RepoDailyBar of the front contract.
+               i.e. /cygdrive/e/research/kdb/repo
+    Return: 
+    the path to RepoDailyBar of the next contract (back contract).
+               i.e. /cygdrive/e/research/kdb/repo_nc
+    """
+    s = repo_path.split('/')
+    s[-1] += '_nc'
+    v=''
+    for s0 in s[:-1] :
+        v+=s0+'/'
+    v+= s[-1]
+    return v
+
+
 class RepoDailyBar :
     @staticmethod
     def make_bootstrap_idx(symbol) :

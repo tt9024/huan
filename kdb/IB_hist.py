@@ -223,6 +223,18 @@ def write_daily_bar(symbol, bar,bar_sec=5,last_close_px=None, fill_missing=False
 
         day=day1
 
+    # filling in missing days if not included in the bad_trade_days
+    bad_trade_days = []
+    it = l1.TradingDayIterator(trd_day_start)
+    while True :
+        day = it.yyyymmdd()
+        if day > trd_day_end :
+            break
+        if day not in trade_days :
+            bad_trade_days.append(day)
+        it.next()
+    
+    print 'got bad trade days ', bad_trade_days
     return barr, trade_days, col_arr, bad_trade_days
 
 
@@ -371,16 +383,17 @@ def get_future_spread(symbol) :
     return tick
 
 
-def fn_from_dates(symbol, sday, eday, is_front_future, is_fx, is_etf) :
+def fn_from_dates(symbol, sday, eday, is_front_future, is_fx, is_etf, hist_path='hist') :
     if is_etf :
-        fqt=glob.glob('hist/ETF/'+symbol+'_[12]*_qt.csv*')
+        fqt=glob.glob(hist_path+'/ETF/'+symbol+'_[12]*_qt.csv*')
     elif is_fx :
-        fqt=glob.glob('hist/FX/'+symbol+'_[12]*_qt.csv*')
+        fqt=glob.glob(hist_path+'/FX/'+symbol+'_[12]*_qt.csv*')
     else :
         if is_front_future :
-            fqt=glob.glob('hist/'+symbol+'/'+symbol+'*_[12]*_qt.csv*')
+            fqt=glob.glob(hist_path+'/'+symbol+'/'+symbol+'*_[12]*_qt.csv*')
         else :
-            fqt=glob.glob('hist/'+symbol+'/'+symbol+'/nc/*_[12]*_qt.csv*')
+            fqt=glob.glob(hist_path+'/'+symbol+'/nc/'+symbol+'??_[12]*_qt.csv*')
+
     ds=[]
     de=[]
     fn=[]
@@ -451,7 +464,7 @@ def gen_daily_bar_ib(symbol, sday, eday, bar_sec, check_only=False, dbar_repo=No
 
     print 'Done!'
 
-    if get_missing and dbar_repo is not None :
+    if len(tda_bad) > 0 and get_missing and dbar_repo is not None :
         print 'getting the missing days ', tda_bad
         import ibbar
         reload(ibbar)
@@ -469,30 +482,41 @@ def gen_daily_bar_ib(symbol, sday, eday, bar_sec, check_only=False, dbar_repo=No
 
     return baa, tda, cola, tda_bad
 
-def ingest_all_symb(sday, eday, repo_path, get_missing=False) :
+
+def ingest_all_symb(sday, eday, repo_path, get_missing=False, sym_list = None) :
+    """
+    This will go to IB historical data, usually in /cygdrive/e/ib/kisco,
+    read all the symbols defined by sym_list and update the repo at repo_path,
+    which is usually at /cygdrive/e/research/kdb
+    if sym_list is None, then it will include all the symbol collected by ibbar.
+    """
     import ibbar
     fut_sym = ibbar.sym_priority_list
-    fx_sym = l1.ven_sym_map['FX']
-    etf_sym = ibbar.ib_sym_etf
-    fut_sym2 = ibbar.sym_priority_list_l1_next
+    fx_sym = l1.ven_sym_map['FX'] 
+    etf_sym = ibbar.ib_sym_etf 
+    fut_sym2 = ibbar.sym_priority_list_l1_next 
+    if sym_list is None :
+        sym_list = fut_sym + fx_sym + etf_sym + fut_sym2
     
-    for sym in fut_sym[:1] :
-        barsec = 1
-        dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
-        gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_front_future=True, is_fx=False, get_missing = get_missing)
+    for sym in sym_list :
+        if sym in fut_sym :
+            barsec = 1
+            dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
+            baa, tda, cola, tda_bad = gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_front_future=True, is_fx=False, get_missing = get_missing)
+        elif sym in fx_sym:
+            barsec = 5
+            dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
+            gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_fx=True, get_missing = get_missing)
 
-    for sym in fx_sym:
-        barsec = 5
-        dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
-        gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_fx=True, get_missing = get_missing)
+        elif sym in etf_sym :
+            barsec = 1
+            dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
+            gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_etf=True, get_missing = get_missing)
 
-    for sym in etf_sym :
-        barsec = 1
-        dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
-        gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_etf=True, get_missing = get_missing)
+        elif sym in fut_sym2 :
+            barsec = 1
+            repo_path_nc = repo.nc_repo_path(repo_path) # repo path of next contract
+            dbar = repo.RepoDailyBar(sym, repo_path = repo_path_nc, create=True)
+            gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_front_future=False, get_missing = get_missing)
 
-    for sym in fut_sym2 :
-        barsec = 1
-        dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
-        gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_front_future=False, get_missing = get_missing)
-        
+
