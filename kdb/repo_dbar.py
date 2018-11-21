@@ -136,11 +136,17 @@ def sync_lr_by_lpx(dbar, day, upd_col=None) :
             print 'lpx updated but not lr, lr to be recalculated',
     print 'update lr based on lpx!'
     bar, col, bs = dbar.load_day(day)
-    lpx_hist = bar[:, col_idx('lpx')]
-    u0 = bar[:, col_idx('utc')]
-    lr = bar[:, col_idx('lr')]
+    lpx_hist = bar[:, ci(col, col_idx('lpx'))]
+    u0 = bar[:, ci(col, col_idx('utc'))]
+
+    # get the overnight lr if exists
+    # assuming it was from KDB or IB hist
+    if col_idx('lr') in col :
+        lr0 = bar[:, ci(col, col_idx('lr'))][0]
+    else :
+        lr0 = 0
     # don't update the over-night lr
-    lr[1:] = np.log(lpx_hist[1:])-np.log(lpx_hist[:-1])
+    lr = np.r_[lr0, np.log(lpx_hist[1:])-np.log(lpx_hist[:-1])]
 
     try :
         lr = lr.reshape((len(u0), 1))

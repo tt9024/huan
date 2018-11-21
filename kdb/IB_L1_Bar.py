@@ -244,6 +244,9 @@ class L1Bar :
         """
         u0 = self.dbar._make_daily_utc(day, self.bar_sec)
         utcix, zix = repo.ix_by_utc(u0, utc, verbose=False)
+        # write a utc and empty lr in first just to make col_idx in order
+        if repo.col_idx('utc') not in ow_cols :
+            self.dbar.overwrite([np.vstack((u0, np.zeros(len(u0)))).T], [day], [repo.col_idx(['utc','lr'])], self.bar_sec)
 
         # basic arr: [vol, vbs, lpx]
         # lpx fwd_bck_fill, others fill 0
@@ -261,7 +264,7 @@ class L1Bar :
         upd_arr0 = np.zeros((len(u0), len(upd_cols)))
         upd_arr0[utcix, :] = upd_arr[zix, :]
         for cn in ['spd', 'ism1'] :
-            ix = np.nonzero(np.array(ow_cols) == repo.col_idx(cn))[0]
+            ix = np.nonzero(np.array(upd_cols) == repo.col_idx(cn))[0]
             if len(ix) == 1 :
                 repo.fwd_bck_fill(upd_arr0[:, ix[0]], v=0)
         self.dbar.overwrite([upd_arr0], [day], [upd_cols], self.bar_sec)
@@ -304,12 +307,12 @@ class L1Bar :
             upd_arr = np.vstack((upd_arr.T, ecols.T)).T
 
         bar, col, bs = self.dbar.load_day(day)
-        if len(bar) == 0 :
+        if len(bar) == 0 or repo.col_idx('utc') not in col:
             print 'nothing found on ', day, ' write as a new day!'
             self._copy_to_repo(day, utc, ow_arr, ow_cols, upd_arr, upd_cols)
             return
 
-        u0 = bar[:, repo.col_idx('utc')]
+        u0 = bar[:, repo.ci(col, repo.col_idx('utc'))]
         utcix, zix = repo.ix_by_utc(u0, utc, verbose=False)
         utc=utc[zix]
         mid=mid[zix]
@@ -321,7 +324,7 @@ class L1Bar :
         utc0 = utc[0]
         if utc0 != self._adjust_time(utc0) :
             ## Save the original lpx history for possible second shift adjustments
-            lpx_hist = bar[:, repo.col_idx('lpx')]
+            lpx_hist = bar[:, repo.ci(col, repo.col_idx('lpx'))]
             ixa, sha = self._best_shift_multi_seg(lpx_hist[utcix], mid, verbose = False)
             print 'got shift of ', ixa, -np.array(sha),  ', reapply and overwrite!'
             for ix, shift in zip(ixa, sha) :
@@ -363,7 +366,7 @@ class L1Bar :
         #########################################################################
         if repo.col_idx('lpx') in col :
             # check for potential mismatch
-            lpx = bar[utcix, repo.col_idx('lpx')]
+            lpx = bar[utcix, repo.ci(col, repo.col_idx('lpx'))]
             mid = ow_arr[:, -1]
             diff = np.abs(np.mean(lpx-mid))
             if diff > l1.asset_info(self.symbol)[0] * 5 :
@@ -383,7 +386,7 @@ class L1Bar :
 
         # ism1 needs to fill with mid
         bar, col, bs = self.dbar.load_day(day)
-        lpx = bar[:, repo.col_idx('lpx')]
+        lpx = bar[:, repo.ci(col, repo.col_idx('lpx'))]
         ix = np.nonzero(upc[:, -1]==0)[0]
         upc[ix, -1] = lpx[ix]
 
@@ -599,6 +602,9 @@ def verify_lpx_lr_vol_vbs_ism(bar, bar5, uarr, barr, earr, day):
 
     This is to plot the differences of IB history, l1 bars and
     the repo after l1 bar updates
+
+    NOTE: repo.col_idx() assumes the bar has everything (by dbar.load_day)
+    and repo.ci(col, idx) is omitted
     """
     f=5
 
@@ -680,30 +686,28 @@ def test_l1(bar_file='bar/20180727/NYM_CL_B1S.csv', hist_load_date = None, symbo
 
 bar_dir = [20180629,20180706,20180713,20180720,20180727,20180803,20180810,20180817,20180824,20180907,20180914,20180921,20180928,20181005,20181012,20181019,20181026,20181102,20181109]
 
-def ingest_l1(symbol, bar_date_dir, repo_path=None, is_nc=False) :
+def ingest_all(bar_date_dir_list, repo_path='/cygdrive/e/research/kdb/repo') :
     """
+    ingest all the symbols in bar_date_dir, including the future, fx, etf and future_nc
+    for each *_B1S.csv* file: 
     read l1bar for symbol from bar_date_dir, i.e. NYM_CL_B1S.csv.gz
-    if repo_path is not None, update the repo for that symbol
-    if is_nc is True, then look for the next contract, i.e. NYM_CL_B1S_bc.csv.gz
-    NOTE: next contracts have different repo_path than front contract
+    if repo_path is not None, update the repo for that symbol. 
+    Note 1: future_nc has *_B1S_bc.csv*,  i.e. NYM_CL_B1S_bc.csv.gz
+            and have different repo_path than front contract, 
+            obtained by repo.nc_repo_path(repo_path), i.e. repo_nc
     """
-    fs = 'bar/'+bar_date_dir+'/*_'+symbol+'_B1S.csv*'
-    fn = glob.glob(fs)
-    if len(fn) != 1 :
-        print 'problem with ', symbol, ' in ', bar_date_dir, ' search: ', fs, ' got: ', fn
-        return
-    dbar = None 
-    if repo_path is not None :
-        dbar = repo.RepoDailyBar(symbol, repo_path=repo_path, create=True)
-
-    l1b = L1Bar(symbol, fn[0], dbar)
-    l1b.read()
-
-def ingest_all(bar_date_dir, repo_path=None, is_nc=False) :
-    fs = 'bar/'+bar_date_dir+'/*_B1S.csv*'
-    fn = glob.glob(fs)
-    for f in fn :
-        sym = f.split('/')[-1].split('_')[1]
-        print 'getting ', sym, ' from ', f
-        ingest_l1(sym, bar_date_dir, repo_path=repo_path, is_nc=is_nc)
+    repo_path_nc = repo.nc_repo_path(repo_path) if repo_path is not None else None
+    for bar_date_dir in bar_date_dir_list :
+        fs_front = 'bar/'+bar_date_dir+'/*_B1S.csv*'
+        fs_back  = 'bar/'+bar_date_dir+'/*_B1S_bc.csv*'
+        for fs, rp in zip([fs_front, fs_back], [repo_path, repo_path_nc]) :
+            fn = glob.glob(fs)
+            for f in fn :
+                sym = f.split('/')[-1].split('_')[1]
+                print 'getting ', sym, ' from ', f, ' repo_path ', rp
+                dbar = None
+                if rp is not None :
+                    dbar = repo.RepoDailyBar(sym, repo_path=rp, create=True)
+                l1b = L1Bar(sym, f, dbar)
+                l1b.read()
 
