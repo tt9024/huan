@@ -698,8 +698,8 @@ def ingest_all(bar_date_dir_list, repo_path='/cygdrive/e/research/kdb/repo') :
     """
     repo_path_nc = repo.nc_repo_path(repo_path) if repo_path is not None else None
     for bar_date_dir in bar_date_dir_list :
-        fs_front = 'bar/'+bar_date_dir+'/*_B1S.csv*'
-        fs_back  = 'bar/'+bar_date_dir+'/*_B1S_bc.csv*'
+        fs_front = 'bar/'+str(bar_date_dir)+'/*_B1S.csv*'
+        fs_back  = 'bar/'+str(bar_date_dir)+'/*_B1S_bc.csv*'
         for fs, rp in zip([fs_front, fs_back], [repo_path, repo_path_nc]) :
             fn = glob.glob(fs)
             for f in fn :
