@@ -803,8 +803,8 @@ def eval_roll0(wb5m, hist, roll, train_wt_decay, clf, feat_select, train_ix0=400
 #grid search confirmed the result
 ####
 def eval_roll(wb5m, hist=600, roll=40, train_wt_decay=0.5, clf=None, feat_select=True, train_ix0=600, ax_arr=None, fit_sign=False,if_plot=False) :
-    coef, yt, yh, dt, cor3, ax=     eval_roll0(wb5m,hist,roll,  train_wt_decay,clf,feat_select,train_ix0=train_ix0,ax_arr=None,fit_sign=fit_sign,if_plot=False)
-    coef2, yt2, yh2, dt2, cor32, ax=eval_roll0(wb5m,hist,roll/2,train_wt_decay,clf,feat_select,train_ix0=train_ix0,ax_arr=None,fit_sign=fit_sign,if_plot=False)
+    coef,  yt,  yh,  dt,  cor3,  ax, xmuarr, xstdarr=eval_roll0(wb5m,hist,roll,  train_wt_decay,clf,feat_select,train_ix0=train_ix0,ax_arr=None,fit_sign=fit_sign,if_plot=False)
+    coef2, yt2, yh2, dt2, cor32, ax, xmuarr, xstdarr=eval_roll0(wb5m,hist,roll/2,train_wt_decay,clf,feat_select,train_ix0=train_ix0,ax_arr=None,fit_sign=fit_sign,if_plot=False)
     #return yt,yh*0.75 + yh2*0.25
     return yt,yh,yh2
 

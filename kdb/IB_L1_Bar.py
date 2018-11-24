@@ -241,7 +241,18 @@ class L1Bar :
         Note 2 lr will be filled by repo automatically.  The overnight lr is 
                lost.
                TODO : set the overnight lr
+        Note 3 Holidays, may have constant prices and zero volumes
+               Don't update the day except:
+               1) number of nonzero volumes are more than 1
+               2) number of lpx changes are more than 1
+               Half days, would be fine
         """
+
+        if len(utc) < 10 or\
+           len(np.nonzero(ow_arr[:, 0]               !=0)[0])<=1 or \
+           len(np.nonzero(ow_arr[1:, 2]-ow_arr[:-1,2]!=0)[0])<=1 :
+            print day, ' has too few updates, skipping '
+            return
         u0 = self.dbar._make_daily_utc(day, self.bar_sec)
         utcix, zix = repo.ix_by_utc(u0, utc, verbose=False)
         # write a utc and empty lr in first just to make col_idx in order
