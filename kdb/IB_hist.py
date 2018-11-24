@@ -483,12 +483,16 @@ def gen_daily_bar_ib(symbol, sday, eday, bar_sec, check_only=False, dbar_repo=No
     return baa, tda, cola, tda_bad
 
 
-def ingest_all_symb(sday, eday, repo_path, get_missing=False, sym_list = None) :
+def ingest_all_symb(sday, eday, repo_path, get_missing=False, sym_list = None, future_inclusion=['front','back']) :
     """
     This will go to IB historical data, usually in /cygdrive/e/ib/kisco,
     read all the symbols defined by sym_list and update the repo at repo_path,
     which is usually at /cygdrive/e/research/kdb
     if sym_list is None, then it will include all the symbol collected by ibbar.
+    future_inclusion defaults to include both front and back.  It is included
+        for ibbar's ingestion, when only front contract is in hist, but
+        the back contracts haven't been retrieved yet.
+    NOTE: ETF and FX symbols are not affected by future_inclusion
     """
     import ibbar
     fut_sym = ibbar.sym_priority_list
@@ -496,9 +500,9 @@ def ingest_all_symb(sday, eday, repo_path, get_missing=False, sym_list = None) :
     etf_sym = ibbar.ib_sym_etf 
     fut_sym2 = ibbar.sym_priority_list_l1_next 
     if sym_list is None :
-        sym_list = fut_sym + fx_sym + etf_sym + fut_sym2
+        sym_list = fut_sym + fx_sym + etf_sym
     
-    for sym in sym_list :
+    for sym in sym_list and 'front' in future_inclusion:
         if sym in fut_sym :
             barsec = 1
             dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
@@ -513,7 +517,7 @@ def ingest_all_symb(sday, eday, repo_path, get_missing=False, sym_list = None) :
             dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
             gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_etf=True, get_missing = get_missing)
 
-        elif sym in fut_sym2 :
+        elif sym in fut_sym2 and 'back' in future_inclusion:
             barsec = 1
             repo_path_nc = repo.nc_repo_path(repo_path) # repo path of next contract
             dbar = repo.RepoDailyBar(sym, repo_path = repo_path_nc, create=True)
