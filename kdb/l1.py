@@ -249,7 +249,9 @@ def venue_by_symbol(symbol) :
             return k
     raise ValueError('venue not found for ' + symbol)
 
-bad_days = ['20180704', '20180101', '20181225']
+bad_days = [                                                                                               '20171122', '20171123', '20171224','20171225', '20171231',\
+            '20180101', '20180115', '20180219', '20180528', '20180704', '20180903', '20181008','20181112', '20181122', '20181123', '20181224','20181225', '20181231',\
+            '20190101']
 def get_start_end_hour(symbol) :
     """
     start on previous day's 18, end on 17,

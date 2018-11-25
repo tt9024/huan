@@ -104,10 +104,18 @@ def write_daily_bar(symbol, bar,bar_sec=5,last_close_px=None, fill_missing=False
         print 'getting bar ', day+'-'+str(start_hour)+':00', day1+'-'+str(end_hour)+':00', ' , got ', j-i, 'bars'
         N = (utc_e-utc_s)/bar_sec  # but we still fill in each bar, so N should be fixed for a given symbol/venue pair
 
-        if N != j-i and not fill_missing:
-            print 'bad day, need to retrieve the hist file again!'
+        # here N*0.95, is to account for some closing hours during half hour ib retrieval time
+        # The problem with using histclient.exe to retrieve IB history data for ES is
+        # set end time is 4:30pm, will retreve 3:45 to 4:15.  Because 4:15-4:30pm doesn't
+        # have data.  This is only true for ES so far
+        # another consideration is that IB Hist client usually won't be off too much, so 95% is 
+        # a good threshold for missing/bad day
+        if N*0.95 > j-i and not fill_missing and day1 not in l1.bad_days :
+            print 'bad day, need to retrieve the hist file again!', N, j-i
             if day1 not in bad_trade_days :
                 bad_trade_days.append(day1)
+        elif day1 in l1.bad_days and j-i < 3600/bar_sec :
+            print 'trade day ', day, ' in holidays ', l1.bad_days, ' and too few updates, ', j-i, ', igored'
         elif day1 in trade_days :
             print 'trade day ', day1, ' already in, skipping'
         else :
@@ -383,7 +391,9 @@ def get_future_spread(symbol) :
     return tick
 
 
-def fn_from_dates(symbol, sday, eday, is_front_future, is_fx, is_etf, hist_path='hist') :
+def fn_from_dates(symbol, sday, eday, is_front_future, is_fx, is_etf) :
+    from ibbar import read_cfg
+    hist_path = read_cfg('HistPath')
     if is_etf :
         fqt=glob.glob(hist_path+'/ETF/'+symbol+'_[12]*_qt.csv*')
     elif is_fx :
@@ -450,11 +460,15 @@ def gen_daily_bar_ib(symbol, sday, eday, bar_sec, check_only=False, dbar_repo=No
             b = bar_by_file_ib_qtonly(f)
         else :
             _,_,b=bar_by_file_ib(f,spread)
-        ba, td, col, bad_days = write_daily_bar(symbol, b,bar_sec=bar_sec)
-        baa+=ba
-        tda+=td
-        cola+=col
-        tda_bad+=bad_days
+        if len(b) > 0 :
+            ba, td, col, bad_days = write_daily_bar(symbol, b,bar_sec=bar_sec)
+            baa+=ba
+            tda+=td
+            cola+=col
+            tda_bad+=bad_days
+        else :
+            print '!!! No bars was read from ', f
+
 
     if dbar_repo is not None :
         dbar_repo.update(baa, tda, cola, bar_sec)
@@ -466,16 +480,15 @@ def gen_daily_bar_ib(symbol, sday, eday, bar_sec, check_only=False, dbar_repo=No
 
     if len(tda_bad) > 0 and get_missing and dbar_repo is not None :
         print 'getting the missing days ', tda_bad
-        import ibbar
-        reload(ibbar)
-        fn = ibbar.get_missing_day(symbol, tda_bad, bar_sec, is_front_future, is_fx)
+        from ibbar import get_missing_day
+        fn = get_missing_day(symbol, tda_bad, bar_sec, is_front_future, is_fx)
         for f in fn :
             try :
                 _,_,b=bar_by_file_ib(f,spread)
                 if len(b) > 0 :
                     ba, td, col, bad_days = write_daily_bar(symbol, b,bar_sec=bar_sec,fill_missing=True)
-                if len(ba) > 0 :
-                    dbar_repo.update(ba, td, col, bar_sec)
+                    if len(ba) > 0 :
+                        dbar_repo.update(ba, td, col, bar_sec)
             except :
                 traceback.print_exc()
                 print 'problem processing file ', f
@@ -483,7 +496,7 @@ def gen_daily_bar_ib(symbol, sday, eday, bar_sec, check_only=False, dbar_repo=No
     return baa, tda, cola, tda_bad
 
 
-def ingest_all_symb(sday, eday, repo_path, get_missing=False, sym_list = None, future_inclusion=['front','back']) :
+def ingest_all_symb(sday, eday, repo_path=None, get_missing=False, sym_list = None, future_inclusion=['front','back'], sym_list_exclude=[]) :
     """
     This will go to IB historical data, usually in /cygdrive/e/ib/kisco,
     read all the symbols defined by sym_list and update the repo at repo_path,
@@ -495,6 +508,8 @@ def ingest_all_symb(sday, eday, repo_path, get_missing=False, sym_list = None, f
     NOTE: ETF and FX symbols are not affected by future_inclusion
     """
     import ibbar
+    if repo_path is None :
+        repo_path=ibbar.read_cfg('RepoPath')
     fut_sym = ibbar.sym_priority_list
     fx_sym = l1.ven_sym_map['FX'] 
     etf_sym = ibbar.ib_sym_etf 
@@ -502,8 +517,10 @@ def ingest_all_symb(sday, eday, repo_path, get_missing=False, sym_list = None, f
     if sym_list is None :
         sym_list = fut_sym + fx_sym + etf_sym
     
-    for sym in sym_list and 'front' in future_inclusion:
-        if sym in fut_sym :
+    for sym in sym_list :
+        if sym in sym_list_exclude :
+            continue
+        if sym in fut_sym and 'front' in future_inclusion:
             barsec = 1
             dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
             baa, tda, cola, tda_bad = gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_front_future=True, is_fx=False, get_missing = get_missing)

@@ -697,7 +697,7 @@ def test_l1(bar_file='bar/20180727/NYM_CL_B1S.csv', hist_load_date = None, symbo
 
 bar_dir = [20180629,20180706,20180713,20180720,20180727,20180803,20180810,20180817,20180824,20180907,20180914,20180921,20180928,20181005,20181012,20181019,20181026,20181102,20181109]
 
-def ingest_all(bar_date_dir_list, repo_path='/cygdrive/e/research/kdb/repo', sym_list=None) :
+def ingest_all_l1(bar_date_dir_list, repo_path='/cygdrive/e/research/kdb/repo', sym_list=None) :
     """
     ingest all the symbols in bar_date_dir, including the future, fx, etf and future_nc
     for each *_B1S.csv* file: 
