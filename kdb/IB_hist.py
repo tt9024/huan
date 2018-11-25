@@ -333,6 +333,46 @@ def bar_by_file_ib(fn,bid_ask_spd,bar_qt=None,bar_trd=None) :
     tts=bar_trd[:,0]
     assert len(np.nonzero(qts[1:]-qts[:-1]<0)[0]) == 0, 'quote time stamp goes back'
     assert len(np.nonzero(tts[1:]-tts[:-1]<0)[0]) == 0, 'trade time stamp goes back'
+
+    # deal with length difference
+    # some times the file content has more days than the file name suggests. 
+    # such as ZNH8_20180201_20180302_1S_qt.csv has days from 2/1 to 3/19. 
+    # but the _trd.csv only has to 3/2 as file name suggests.  
+    # In this case, take the shorter one and ensure the days
+    # checked for gaps in between for missing days
+
+    while True :
+        dtq0 = datetime.datetime.fromtimestamp(qts[0])
+        dtt0 = datetime.datetime.fromtimestamp(tts[0])
+        dtq1 = datetime.datetime.fromtimestamp(qts[-1])
+        dtt1 = datetime.datetime.fromtimestamp(tts[-1])
+        print 'Got Quote: ',  dtq0, ' to ', dtq1, ' Trade: ', dtt0, ' to ', dtt1
+
+        if (qts[-1] != tts[-1]) :
+            print '!!! Quote/Trade ending mismatch!!!'
+            ts = min(qts[-1], tts[-1])
+            if qts[-1] > ts :
+                ix = np.nonzero(qts>ts)[0]
+                qts = qts[:ix[0]]
+                bar_qt = bar_qt[:ix[0], :]
+            else :
+                ix = np.nonzero(tts>ts)[0]
+                tts = tts[:ix[0]]
+                bar_trd = bar_trd[:ix[0], :]
+        elif (qts[0] != tts[0]) :
+            print '!!! Quote/Trade starting mismatch!!!'
+            ts = max(qts[0], tts[0])
+            if qts[0] < ts :
+                ix = np.nonzero(qts<=ts)[0]
+                qts = qts[ix[-1]:]
+                bar_qt = bar_qt[ix[-1]:, :]
+            else :
+                ix = np.nonzero(tts<=ts)[0]
+                tts = tts[ix[-1]:]
+                bar_trd = bar_trd[ix[-1]:, :]
+        else :
+            break
+
     tix=np.searchsorted(tts,qts)
     # they should be the same, otherwise, patch the different ones
     ix0=np.nonzero(tts[tix]-qts!=0)[0]
@@ -394,15 +434,18 @@ def get_future_spread(symbol) :
 def fn_from_dates(symbol, sday, eday, is_front_future, is_fx, is_etf) :
     from ibbar import read_cfg
     hist_path = read_cfg('HistPath')
+    sym0 = symbol
+    if symbol in l1.RicMap.keys() :
+        sym0 = l1.RicMap[symbol]
     if is_etf :
-        fqt=glob.glob(hist_path+'/ETF/'+symbol+'_[12]*_qt.csv*')
+        fqt=glob.glob(hist_path+'/ETF/'+sym0+'_[12]*_qt.csv*')
     elif is_fx :
-        fqt=glob.glob(hist_path+'/FX/'+symbol+'_[12]*_qt.csv*')
+        fqt=glob.glob(hist_path+'/FX/'+sym0+'_[12]*_qt.csv*')
     else :
         if is_front_future :
-            fqt=glob.glob(hist_path+'/'+symbol+'/'+symbol+'*_[12]*_qt.csv*')
+            fqt=glob.glob(hist_path+'/'+symbol+'/'+sym0+'*_[12]*_qt.csv*')
         else :
-            fqt=glob.glob(hist_path+'/'+symbol+'/nc/'+symbol+'??_[12]*_qt.csv*')
+            fqt=glob.glob(hist_path+'/'+symbol+'/nc/'+sym0+'??_[12]*_qt.csv*')
 
     ds=[]
     de=[]
@@ -476,9 +519,25 @@ def gen_daily_bar_ib(symbol, sday, eday, bar_sec, check_only=False, dbar_repo=No
     tda_bad = list(set(tda_bad))
     tda_bad.sort()
 
-    print 'Done!'
+    print 'Done!' 
 
     if len(tda_bad) > 0 and get_missing and dbar_repo is not None :
+        # there could be some duplication in files, so
+        # so some files has bad days but otherwise already in other files.
+        if len(tda) > 0 :
+            print ' checking on the bad days ', tda_bad, ' out of trading days ', tda
+            missday=[]
+            d0 = min(tda[0], tda_bad[0])
+            d1 = max(tda[-1], tda_bad[-1])
+            diter = l1.TradingDayIterator(d0)
+            d0 = diter.yyyymmdd()
+            while d0 <= d1 :
+                if d0 not in tda and d0 not in l1.bad_days :
+                    missday.append(d0)
+                diter.next()
+                d0=diter.yyyymmdd()
+            tda_bad = missday
+
         print 'getting the missing days ', tda_bad
         from ibbar import get_missing_day
         fn = get_missing_day(symbol, tda_bad, bar_sec, is_front_future, is_fx)
@@ -520,6 +579,7 @@ def ingest_all_symb(sday, eday, repo_path=None, get_missing=False, sym_list = No
     for sym in sym_list :
         if sym in sym_list_exclude :
             continue
+        print 'ingesting ', sym
         if sym in fut_sym and 'front' in future_inclusion:
             barsec = 1
             dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
