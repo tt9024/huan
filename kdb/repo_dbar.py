@@ -253,7 +253,8 @@ class RepoDailyBar :
                 raise ValueError('idx.npz not found from ' + self.path)
 
         self.venue = self.idx['global']['venue']
-        self.sh,self.eh = self.idx['global']['sehour']
+        #self.sh,self.eh = self.idx['global']['sehour']
+        self.sh,self.eh = l1.get_start_end_hour(symbol)
 
     def update(self, bar_arr, day_arr, col_arr, bar_sec) :
         """

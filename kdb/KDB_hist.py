@@ -485,7 +485,7 @@ def fix_days_from_old_cl_repo(td, sday, eday, old_cl_repo) :
         day1=ti.yyyymmdd()
     return barr, tda, col
 
-def ingest_all_kdb_repo(kdb_path='/cygdrive/e/kdb', repo_path='/cygdrive/e/research/kdb/repo', all_sym=kdb_future_symbols + kdb_fx_symbols + kdb_etf_symbols, year_s=1998, year_e=2018) :
+def ingest_all_kdb_repo(kdb_path='/cygdrive/c/zfu/data/kdb', repo_path='/cygdrive/c/zfu/kisco/repo', all_sym=kdb_future_symbols + kdb_fx_symbols + kdb_etf_symbols, year_s=1998, year_e=2018) :
     sym_arr = []
     td_arr = []
     tdbad_arr = []

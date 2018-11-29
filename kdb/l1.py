@@ -241,8 +241,8 @@ ICEFutures = ven_sym_map['ICE']
 future_venues=['NYM','CME','CBT','EUX','ICE','NYBOT']
 fx_venues=['FX']
 
-HoursDefines={'CMEAgriHours':[-4, 15], 'CMELiveStockHours':[9, 15], 'ICEHours':[-4, 18], 'CocoaHours':[4,14], 'CottonHours':[-3, 15], 'SugarHours':[3,13], 'USStock':[9,16]}
-start_stop_hours_symbol={'CMEAgriHours': ['ZC','ZW','ZS','ZM','ZL'], 'CMELiveStockHours': ['HE', 'LE'], 'ICEHours':['LCO','LFU','LOU'], 'CocoaHours':['CC','KC'], 'CottonHours':['CT'], 'SugarHours':['SB'], 'USStock':['ETF']}
+HoursDefines={'CMEAgriHours':[-4, 15], 'CMELiveStockHours':[9, 15], 'ICEHours':[-4, 18], 'CocoaHours':[4,14], 'CottonHours':[-3, 15], 'SugarHours':[3,13], 'USStockHours':[9,16], 'EUXHours':[2,16]}
+start_stop_hours_symbol={'CMEAgriHours': ['ZC','ZW','ZS','ZM','ZL'], 'CMELiveStockHours': ['HE', 'LE'], 'ICEHours':['LCO','LFU','LOU'], 'CocoaHours':['CC','KC'], 'CottonHours':['CT'], 'SugarHours':['SB'], 'USStockHours':['ETF'], 'EUXHours':['FDX','STXE','FGBX','FGBL','FGBS','FGBM']}
 def venue_by_symbol(symbol) :
     for k,v in ven_sym_map.items() :
         if symbol in v :

@@ -342,6 +342,8 @@ def bar_by_file_ib(fn,bid_ask_spd,bar_qt=None,bar_trd=None) :
     # checked for gaps in between for missing days
 
     while True :
+        if len(qts) < 10 :
+            return [],[],[]
         dtq0 = datetime.datetime.fromtimestamp(qts[0])
         dtt0 = datetime.datetime.fromtimestamp(tts[0])
         dtq1 = datetime.datetime.fromtimestamp(qts[-1])
@@ -363,13 +365,15 @@ def bar_by_file_ib(fn,bid_ask_spd,bar_qt=None,bar_trd=None) :
             print '!!! Quote/Trade starting mismatch!!!'
             ts = max(qts[0], tts[0])
             if qts[0] < ts :
-                ix = np.nonzero(qts<=ts)[0]
-                qts = qts[ix[-1]:]
-                bar_qt = bar_qt[ix[-1]:, :]
+                ix = np.nonzero(qts<ts)[0]
+                six = ix[-1]+1
+                qts = qts[six:]
+                bar_qt = bar_qt[six:, :]
             else :
-                ix = np.nonzero(tts<=ts)[0]
-                tts = tts[ix[-1]:]
-                bar_trd = bar_trd[ix[-1]:, :]
+                ix = np.nonzero(tts<ts)[0]
+                six = ix[-1]+1
+                tts = tts[six:]
+                bar_trd = bar_trd[six:, :]
         else :
             break
 
