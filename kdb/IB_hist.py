@@ -104,13 +104,13 @@ def write_daily_bar(symbol, bar,bar_sec=5,last_close_px=None, fill_missing=False
         print 'getting bar ', day+'-'+str(start_hour)+':00', day1+'-'+str(end_hour)+':00', ' , got ', j-i, 'bars'
         N = (utc_e-utc_s)/bar_sec  # but we still fill in each bar, so N should be fixed for a given symbol/venue pair
 
-        # here N*0.95, is to account for some closing hours during half hour ib retrieval time
+        # here N*0.90, is to account for some closing hours during half hour ib retrieval time
         # The problem with using histclient.exe to retrieve IB history data for ES is
         # set end time is 4:30pm, will retreve 3:45 to 4:15.  Because 4:15-4:30pm doesn't
         # have data.  This is only true for ES so far
-        # another consideration is that IB Hist client usually won't be off too much, so 95% is 
+        # another consideration is that IB Hist client usually won't be off too much, so 90% is 
         # a good threshold for missing/bad day
-        if N*0.95 > j-i and not fill_missing and day1 not in l1.bad_days :
+        if N*0.90 > j-i and not fill_missing and day1 not in l1.bad_days :
             print 'bad day, need to retrieve the hist file again!', N, j-i
             if day1 not in bad_trade_days :
                 bad_trade_days.append(day1)
@@ -536,7 +536,7 @@ def gen_daily_bar_ib(symbol, sday, eday, bar_sec, check_only=False, dbar_repo=No
             diter = l1.TradingDayIterator(d0)
             d0 = diter.yyyymmdd()
             while d0 <= d1 :
-                if d0 not in tda and d0 not in l1.bad_days :
+                if d0 not in tda and d0 not in l1.bad_days and d0>=sday and d0<=eday :
                     missday.append(d0)
                 diter.next()
                 d0=diter.yyyymmdd()

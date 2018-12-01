@@ -105,7 +105,9 @@ def ix_by_utc(u0, utc, verbose=True) :
     """
     get an index of utc into the day's existing daily_utc u0
     For example, u0 = self._make_daily_utc(day, bar_sec)
-    return: an index of utc into u0, used for overwirte
+    return: ix0: an index of utc into u0, used for overwirte
+            zix: an index into utc, for matching entries
+            
     """
     ix0 = np.clip(np.searchsorted(u0, utc), 0, len(u0)-1)
     zix = np.nonzero(u0[ix0] - utc == 0)[0]
@@ -477,6 +479,10 @@ class RepoDailyBar :
         read a day from repo, files are stored in the day directory
         each day's index is stored as a key in the repo's symbol 
         index
+        Note: The start/stop time may be different from time to time.
+              Especially KDB and IB hist.
+              self.sh and self.eh initialized from l1.start_stop_hour()
+              Scale to satisfy this
         """
         col = []
         bs = 0
@@ -491,7 +497,22 @@ class RepoDailyBar :
         else :
             return [], [], 0
 
-        assert self._get_totalbars(bs) == len(bar), bfn + ' wrong size: '+str(len(bar)) + ' should  be  ' + str(self._get_totalbars(bs))
+        #assert self._get_totalbars(bs) == len(bar), bfn + ' wrong size: '+str(len(bar)) + ' should  be  ' + str(self._get_totalbars(bs))
+        if self._get_totalbars(bs) != len(bar) :
+            print bfn + ' wrong size: '+str(len(bar)) + ' should  be  ' + str(self._get_totalbars(bs))
+            utc=bar[:, ci(col,utcc)]
+            u0 = self._make_daily_utc(day, bs)
+            ix0, zix = ix_by_utc(u0, utc, verbose=False)
+            bar = bar[zix, :]
+            if len(zix) != len(u0) :
+                bar0 = np.zeros((len(u0), len(col)))
+                bar0[:, ci(col, utcc)] = u0
+                bar0[ix0, :] = bar[:, :]
+                # fill forward and backward for ltt, lpx, ism1, spd
+                for i, c in enumerate(col) :
+                    if c in [lttc, lpxc] + col_idx(['ism1', 'spd']) :
+                        repo.fwd_bck_fill(bar0[:,i],  v=0)
+                bar = bar0
         return bar, col, bs
 
     def remove_day(self, day) :
