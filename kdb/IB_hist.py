@@ -114,8 +114,8 @@ def write_daily_bar(symbol, bar,bar_sec=5,last_close_px=None, fill_missing=False
             print 'bad day, need to retrieve the hist file again!', N, j-i
             if day1 not in bad_trade_days :
                 bad_trade_days.append(day1)
-        elif day1 in l1.bad_days and j-i < 3600/bar_sec :
-            print 'trade day ', day, ' in holidays ', l1.bad_days, ' and too few updates, ', j-i, ', igored'
+        elif j-i < 3600/bar_sec :
+            print 'trade day ', day, ' too few updates ', j-i, ', ignored'
         elif day1 in trade_days :
             print 'trade day ', day1, ' already in, skipping'
         else :
@@ -486,10 +486,28 @@ def fn_from_dates(symbol, sday, eday, is_front_future, is_fx, is_etf) :
         fns = np.delete(fns, ix+1)
     return fns
 
-def gen_daily_bar_ib(symbol, sday, eday, bar_sec, check_only=False, dbar_repo=None, is_front_future=True, is_fx = False, is_etf = False, get_missing=True) :
+def get_barsec_from_file(f) :
+    fa = f.split('_')
+    for f0 in fa :
+        if f0[-1] == 'S' :
+            try :
+                return int(f0[:-1])
+            except :
+                pass
+    raise ValueError('no barsec detected in file %s'%(f))
+
+def gen_daily_bar_ib(symbol, sday, eday, default_barsec, check_only=False, dbar_repo=None, is_front_future=True, is_fx = False, is_etf = False, get_missing=True, barsec_from_file=True) :
     """
     generate IB dily bars from sday to eday.
     It is intended to be used to add too the daily bar repo manually
+    NOTE 1: bar_sec from file name is used to read/write the day. 
+            default_barsec given is taken as a default when getting missing days. 
+            When barsec_from_file is not True, the bar_sec from file name
+            is checked against the default bar_sec given and raises on mismatch.
+    NOTE 2: barsec_from_file enforces all day's barsec has to agree with default_barsec
+    NOTE 3: The flexibility on barsec from file name is to entertain IB's rule for
+            half year history on 1S, 1 year history on 30S bar, etc, enforced 
+            differently on asset classes. Inconsistencies on weekly operations
     """
     fn = fn_from_dates(symbol, sday, eday, is_front_future, is_fx, is_etf)
     spread = get_future_spread(symbol)
@@ -502,23 +520,33 @@ def gen_daily_bar_ib(symbol, sday, eday, bar_sec, check_only=False, dbar_repo=No
     tda=[]
     cola=[]
     tda_bad=[]
+    td_bs_map={}
     for f in fn :
+        bar_sec=get_barsec_from_file(f)
+        if bar_sec != default_barsec :
+            if not barsec_from_file :
+                raise ValueError('Bar second mismatch for file %s with barsec %d'%(f,default_barsec))
+            else :
+                print 'Set barsec to ', bar_sec, ' from ', default_barsec
+
         if is_fx :
             b = bar_by_file_ib_qtonly(f)
         else :
             _,_,b=bar_by_file_ib(f,spread)
         if len(b) > 0 :
             ba, td, col, bad_days = write_daily_bar(symbol, b,bar_sec=bar_sec)
+            if dbar_repo is not None :
+                dbar_repo.update(ba, td, col, bar_sec)
+
             baa+=ba
             tda+=td
             cola+=col
             tda_bad+=bad_days
+            # register the bar_sec for trade days
+            for td0 in bad_days + td :
+                td_bs_map[td0] = bar_sec
         else :
             print '!!! No bars was read from ', f
-
-
-    if dbar_repo is not None :
-        dbar_repo.update(baa, tda, cola, bar_sec)
 
     tda_bad = list(set(tda_bad))
     tda_bad.sort()
@@ -544,10 +572,23 @@ def gen_daily_bar_ib(symbol, sday, eday, bar_sec, check_only=False, dbar_repo=No
 
         print 'getting the missing days ', tda_bad
         from ibbar import get_missing_day
-        fn = get_missing_day(symbol, tda_bad, bar_sec, is_front_future, is_fx)
+        fn = []
+        for td0 in tda_bad :
+            print 'Getting ', td0, ' barsec = ', 
+            try :
+                bar_sec=td_bs_map[td0]
+                print bar_sec
+            except :
+                bar_sec=default_barsec
+                print bar_sec, ' (default_barsec)'
+            fn += get_missing_day(symbol, [td0], bar_sec, is_front_future, is_fx)
+
         for f in fn :
             try :
-                _,_,b=bar_by_file_ib(f,spread)
+                if is_fx :
+                    b = bar_by_file_ib_qtonly(f)
+                else :
+                    _,_,b=bar_by_file_ib(f,spread)
                 if len(b) > 0 :
                     ba, td, col, bad_days = write_daily_bar(symbol, b,bar_sec=bar_sec,fill_missing=True)
                     if len(ba) > 0 :
@@ -598,7 +639,7 @@ def ingest_all_symb(sday, eday, repo_path=None, get_missing=False, sym_list = No
             dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
             gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_etf=True, get_missing = get_missing)
 
-        elif sym in fut_sym2 and 'back' in future_inclusion:
+        if sym in fut_sym2 and 'back' in future_inclusion:
             barsec = 1
             repo_path_nc = repo.nc_repo_path(repo_path) # repo path of next contract
             dbar = repo.RepoDailyBar(sym, repo_path = repo_path_nc, create=True)

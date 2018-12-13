@@ -516,12 +516,18 @@ class RepoDailyBar :
         return bar, col, bs
 
     def remove_day(self, day) :
-        ret=self.idx['daily'].pop(day)
-        if ret is None :
-            print 'day ', day, ' not found, not removed'
-            return
-        os.system('rm -fR ' + self.path+'/daily/'+day)
-        np.savez_compressed(self.idxfn, idx=self.idx)
+        try :
+            ret=self.idx['daily'].pop(day)
+            if ret is not None :
+                np.savez_compressed(self.idxfn, idx=self.idx)
+        except :
+            print self.symbol, ' on ', day, ': not found in index, NOT REMOVED'
+
+        try :
+            os.system('rm -fR ' + self.path+'/daily/'+day)
+        except :
+            traceback.print_exc()
+            print self.symbol, ' on ', day, ': not found in daily file, NOT REMOVED '
 
     def _dump_day(self, day, bar, col, bar_sec) :
         """

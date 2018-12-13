@@ -229,9 +229,9 @@ ven_sym_map={'NYM':['CL','NG','HO','RB','GC','SI','HG','PA'], \
                     'EUR.SEK','EUR.TRY','EUR.ZAR','GBP.CHF','GBP.JPY',\
                     'NOK.SEK','NZD.JPY','EUR.USD','USD.ZAR','USD.TRY',\
                     'USD.MXN','USD.CNH','XAU.USD','XAG.USD', \
-                    'AUD.USD','EUR.USD','GBP.USD','NZD.USD','USD.JPY',\
+                    'AUD.USD','GBP.USD','NZD.USD','USD.JPY',\
                     'USD.CAD','USD.NOK','USD.SEK','USD.CHF','USD.RUB',\
-                    'GBP.AUD', 'GBP.CAD','GBP.NOK','GBP.CHF','GBP.CNH'],\
+                    'GBP.AUD', 'GBP.CAD','GBP.NOK','GBP.CNH'],\
              'ETF':['EEM','EPI','EWJ','EWZ','EZU','FXI','GDX','ITB','KRE','QQQ','RSX','SPY','UGAZ','USO','VEA','VXX','XLE','XLF','XLK','XLU','XOP'],\
              'ICE':['LCO','LFU','LOU'], \
              # NYBOT no permission from IB yet 
@@ -250,7 +250,7 @@ def venue_by_symbol(symbol) :
     raise ValueError('venue not found for ' + symbol)
 
 # the holidays, days that are half day or no data. be cautious about these day
-bad_days = [                                                                                                           '20171122', '20171123', '20171224','20171225', '20171231',\
+bad_days = ['20170101',                                                 '20170704',                                    '20171122', '20171123', '20171224','20171225', '20171231',\
             '20180101', '20180115', '20180219', '20180330', '20180528', '20180704', '20180903', '20181008','20181112', '20181122', '20181123', '20181224','20181225', '20181231',\
             '20190101']
 def get_start_end_hour(symbol) :
