@@ -516,6 +516,7 @@ class RepoDailyBar :
         return bar, col, bs
 
     def remove_day(self, day) :
+        print 'repo removing %s on %s'%(self.symbol, day)
         try :
             ret=self.idx['daily'].pop(day)
             if ret is not None :

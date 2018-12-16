@@ -20,7 +20,7 @@ import repo_dbar as repo
 # * allow gzip of csv
 # This should be the on-going, as the KDB bars be in repo for once and for all
 
-def write_daily_bar(symbol, bar,bar_sec=5,last_close_px=None, fill_missing=False) :
+def write_daily_bar(symbol, bar, bar_sec=5, is_front=True, last_close_px=None, get_missing=True):
     """
     bar: all bars from a hist file having the format of 
     [utc, utc_ltt, open_px, hi_px, lo_px, close_px, vwap, vol, vb, vs]
@@ -34,7 +34,7 @@ def write_daily_bar(symbol, bar,bar_sec=5,last_close_px=None, fill_missing=False
     Note 2, the first bar of a day should be 1 bar_sec after the starting utc and
     the last bar of a day should be at the ending utc.
 
-    if fill_missing is set to true, such as a half day, then do zero filling
+    if get_missing is set to true, then try to get the bar on a bad day
 
     Output: 
     array of daily_bar for each day covered in the bar (hist file)
@@ -67,7 +67,7 @@ def write_daily_bar(symbol, bar,bar_sec=5,last_close_px=None, fill_missing=False
             last_close_px=bar[x,5]
             print 'last close price set to previous close at ', datetime.datetime.fromtimestamp(bar[x,0]), ' px: ', last_close_px
     else :
-        print 'last close price set to ', last_close_px
+        print 'GIVEN last close price ', last_close_px
 
     day_end=datetime.datetime.fromtimestamp(bar[-1,0]).strftime('%Y%m%d')
     # deciding on the trading days
@@ -82,17 +82,14 @@ def write_daily_bar(symbol, bar,bar_sec=5,last_close_px=None, fill_missing=False
     trd_day_end=day_end
     print 'preparing bar from ', day_start, ' to ', day_end, ' , trading days: ', trd_day_start, trd_day_end
 
-    ti=l1.TradingDayIterator(day_start, adj_start=False) # day maybe a sunday
-    day=ti.yyyymmdd()  # day is the start_day
+    ti=l1.TradingDayIterator(trd_day_start, adj_start=False) # day maybe a sunday
+    day1=ti.yyyymmdd()  # first trading day
     barr=[]
     trade_days=[]
     col_arr=[]
     bad_trade_days=[]
-    while day < day_end:  # day is the prevous night of the trading day
-        ti.next()
-        day1=ti.yyyymmdd()
+    while day1 <= trd_day_end: 
         utc_e = int(l1.TradingDayIterator.local_ymd_to_utc(day1, end_hour,0,0))
-
         # get start backwards for starting on a Sunday
         utc_s = utc_e - TRADING_HOURS*3600  # LIMITATION:  start/stop has to be on a whole hour
         day=datetime.datetime.fromtimestamp(utc_s).strftime('%Y%m%d')
@@ -110,14 +107,35 @@ def write_daily_bar(symbol, bar,bar_sec=5,last_close_px=None, fill_missing=False
         # have data.  This is only true for ES so far
         # another consideration is that IB Hist client usually won't be off too much, so 90% is 
         # a good threshold for missing/bad day
-        if N*0.90 > j-i and not fill_missing and day1 not in l1.bad_days :
-            print 'bad day, need to retrieve the hist file again!', N, j-i
-            if day1 not in bad_trade_days :
-                bad_trade_days.append(day1)
-        elif j-i < 3600/bar_sec :
-            print 'trade day ', day, ' too few updates ', j-i, ', ignored'
-        elif day1 in trade_days :
-            print 'trade day ', day1, ' already in, skipping'
+        bar_good = True
+        if j-i<N*0.90 :
+            bar_good=False
+            print 'fewer bars for trading day %s: %d < %d * 0.9'%(day1, j-i,N)
+
+        if not bar_good:
+            if day1 not in l1.bad_days and get_missing :
+                # recurse with the current last price and get the updated last price
+                print 'getting missing day %s'%(day1)
+                from ibbar import get_missing_day
+                fn = get_missing_day(symbol, [day1], bar_sec=bar_sec, is_front=is_front, reuse_exist_file=True)
+                _,_,b0=bar_by_file_ib(fn[0],symbol)
+                if len(b0) > j-i :
+                    print 'Getting more bars %d > %d on %s for %s, take it!'%(len(b0), j-i, day1, symbol)
+                    barr0, trade_days0, col_arr0, bad_trade_days0, last_close_px0=write_daily_bar(symbol, b0, bar_sec=bar_sec, is_front=is_front, last_close_px=last_close_px, get_missing=False)
+                    # taken as done
+                    barr+=barr0
+                    trade_days+=trade_days0
+                    col_arr+=col_arr0
+                    bad_trade_days+=bad_trade_days0
+                    last_close_px=last_close_px0
+                    ti.next()
+                    day1=ti.yyyymmdd()
+                    continue
+                print 'Got %d bars on %s, had %d bars (%s), use previous!'%(len(b0), day1, j-i, symbol)
+
+        if len(bar0) < 1 :
+            print 'Bad Day! Too fewer bars in trading day %s: %d, should have %d '%(day1, j-i,N)
+            bad_trade_days.append(day1)
         else :
             ix_utc=((bar0[:,0]-float(utc_s))/bar_sec+1e-9).astype(int) # lr(close_px-open_px) of a bar0 has bar_utc
             bar_utc=np.arange(utc_s+bar_sec, utc_e+bar_sec, bar_sec) # bar time will be time of close price, as if in prod
@@ -229,10 +247,12 @@ def write_daily_bar(symbol, bar,bar_sec=5,last_close_px=None, fill_missing=False
             trade_days.append(day1)
             col_arr.append(repo.kdb_ib_col)
 
-        day=day1
+        ti.next()
+        day1=ti.yyyymmdd()
 
     # filling in missing days if not included in the bad_trade_days
     bad_trade_days = []
+    good_trade_days = []
     it = l1.TradingDayIterator(trd_day_start)
     while True :
         day = it.yyyymmdd()
@@ -240,10 +260,12 @@ def write_daily_bar(symbol, bar,bar_sec=5,last_close_px=None, fill_missing=False
             break
         if day not in trade_days :
             bad_trade_days.append(day)
+        else :
+            good_trade_days.append(day)
         it.next()
-    
+
     print 'got bad trade days ', bad_trade_days
-    return barr, trade_days, col_arr, bad_trade_days
+    return barr, good_trade_days, col_arr, bad_trade_days, last_close_px
 
 
 def bar_by_file_ib_qtonly(fn) :
@@ -288,10 +310,15 @@ def bar_by_file_ib_qtonly(fn) :
         os.system('gzip ' + f)
     return bar
 
-def bar_by_file_ib(fn,bid_ask_spd,bar_qt=None,bar_trd=None) :
+def bar_by_file_ib(fn, symbol, bar_qt=None,bar_trd=None) :
     """ 
     _qt.csv and _trd.csv are expected to exist for the given fn
     """
+    bid_ask_spd = get_future_spread(symbol)
+    is_fx = l1.venue_by_symbol(symbol) == 'FX'
+
+    if is_fx :
+        return [], [], bar_by_file_ib_qtonly(fn)
 
     if fn[-3:] == '.gz' :
         fn = fn[:-3]
@@ -435,7 +462,14 @@ def get_future_spread(symbol) :
     return tick
 
 
-def fn_from_dates(symbol, sday, eday, is_front_future, is_fx, is_etf) :
+def fn_from_dates(symbol, sday, eday, is_front_future) :
+    try :
+        is_fx = l1.venue_by_symbol(symbol) == 'FX'
+        is_etf = l1.venue_by_symbol(symbol) == 'ETF'
+    except :
+        print 'Unknow symbol %s'%(symbol)
+        raise ValueError('Unknown symbol ' + symbol)
+
     from ibbar import read_cfg
     hist_path = read_cfg('HistPath')
     sym0 = symbol
@@ -484,7 +518,7 @@ def fn_from_dates(symbol, sday, eday, is_front_future, is_fx, is_etf) :
     if len(ix) > 0 :
         print fns[ix+1], ' contained by ', fns[ix], ', removed, if needed, consider load and overwrite repo'
         fns = np.delete(fns, ix+1)
-    return fns
+    return fns, is_fx, is_etf
 
 def get_barsec_from_file(f) :
     fa = f.split('_')
@@ -496,7 +530,7 @@ def get_barsec_from_file(f) :
                 pass
     raise ValueError('no barsec detected in file %s'%(f))
 
-def gen_daily_bar_ib(symbol, sday, eday, default_barsec, check_only=False, dbar_repo=None, is_front_future=True, is_fx = False, is_etf = False, get_missing=True, barsec_from_file=True) :
+def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_future=True, get_missing=True, barsec_from_file=True, overwrite_dbar=False) :
     """
     generate IB dily bars from sday to eday.
     It is intended to be used to add too the daily bar repo manually
@@ -504,23 +538,21 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, check_only=False, dbar_
             default_barsec given is taken as a default when getting missing days. 
             When barsec_from_file is not True, the bar_sec from file name
             is checked against the default bar_sec given and raises on mismatch.
-    NOTE 2: barsec_from_file enforces all day's barsec has to agree with default_barsec
+    NOTE 2: barsec_from_file being False enforces all day's barsec has to agree with default_barsec
     NOTE 3: The flexibility on barsec from file name is to entertain IB's rule for
             half year history on 1S, 1 year history on 30S bar, etc, enforced 
             differently on asset classes. Inconsistencies on weekly operations
+    NOTE 4: if overwrite_dbar is True, then the existing repo content on the day will be deleted before
+            ingestion
     """
-    fn = fn_from_dates(symbol, sday, eday, is_front_future, is_fx, is_etf)
+
+    fn, is_fx, is_etf = fn_from_dates(symbol, sday, eday, is_front_future)
     spread = get_future_spread(symbol)
     print 'Got ', len(fn), ' files: ', fn, ' spread: ', spread
 
-    if check_only :
-        return
     num_col=8 # adding spd vol, last_trd_time, last_close_pxa
-    baa=[]
     tda=[]
-    cola=[]
     tda_bad=[]
-    td_bs_map={}
     for f in fn :
         bar_sec=get_barsec_from_file(f)
         if bar_sec != default_barsec :
@@ -529,78 +561,71 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, check_only=False, dbar_
             else :
                 print 'Set barsec to ', bar_sec, ' from ', default_barsec
 
-        if is_fx :
-            b = bar_by_file_ib_qtonly(f)
-        else :
-            _,_,b=bar_by_file_ib(f,spread)
+        _,_,b=bar_by_file_ib(f,symbol)
         if len(b) > 0 :
-            ba, td, col, bad_days = write_daily_bar(symbol, b,bar_sec=bar_sec)
-            if dbar_repo is not None :
-                dbar_repo.update(ba, td, col, bar_sec)
-
-            baa+=ba
+            ba, td, col, bad_days, last_px = write_daily_bar(symbol, b,bar_sec=bar_sec, is_front=is_front_future, get_missing=get_missing)
+            if overwrite_dbar :
+                for td0 in td :
+                    # assuming days in increasing order: don't delete days
+                    # just written 
+                    if td0 not in tda :
+                        dbar_repo.remove_day(td0)
+            dbar_repo.update(ba, td, col, bar_sec)
             tda+=td
-            cola+=col
             tda_bad+=bad_days
-            # register the bar_sec for trade days
-            for td0 in bad_days + td :
-                td_bs_map[td0] = bar_sec
         else :
             print '!!! No bars was read from ', f
 
+    tda = list(set(tda))
+    tda.sort()
     tda_bad = list(set(tda_bad))
     tda_bad.sort()
 
-    print 'Done!' 
-
-    if len(tda_bad) > 0 and get_missing and dbar_repo is not None :
+    # in case there are some entirely missed days
+    if get_missing :
         # there could be some duplication in files, so
         # so some files has bad days but otherwise already in other files.
+        missday=[]
         if len(tda) > 0 :
-            print ' checking on the bad days ', tda_bad, ' out of trading days ', tda
             missday=[]
             d0 = min(tda[0], tda_bad[0])
             d1 = max(tda[-1], tda_bad[-1])
+            print ' checking on the missing days from %s to %s'%(d0, d1)
             diter = l1.TradingDayIterator(d0)
-            d0 = diter.yyyymmdd()
             while d0 <= d1 :
-                if d0 not in tda and d0 not in l1.bad_days and d0>=sday and d0<=eday :
+                if d0 not in tda and d0 not in tda_bad and  d0 not in l1.bad_days and d0>=sday and d0<=eday :
                     missday.append(d0)
                 diter.next()
                 d0=diter.yyyymmdd()
-            tda_bad = missday
+        else :
+            print 'no days found for %s from %s to %s'%(symbol, sday, eday)
 
-        print 'getting the missing days ', tda_bad
-        from ibbar import get_missing_day
-        fn = []
-        for td0 in tda_bad :
-            print 'Getting ', td0, ' barsec = ', 
-            try :
-                bar_sec=td_bs_map[td0]
-                print bar_sec
-            except :
-                bar_sec=default_barsec
-                print bar_sec, ' (default_barsec)'
-            fn += get_missing_day(symbol, [td0], bar_sec, is_front_future, is_fx)
-
-        for f in fn :
-            try :
-                if is_fx :
-                    b = bar_by_file_ib_qtonly(f)
-                else :
-                    _,_,b=bar_by_file_ib(f,spread)
-                if len(b) > 0 :
-                    ba, td, col, bad_days = write_daily_bar(symbol, b,bar_sec=bar_sec,fill_missing=True)
-                    if len(ba) > 0 :
+        if len(missday) > 0 :
+            print 'getting the missing days ', missing
+            from ibbar import get_missing_day
+            fn = get_missing_day(symbol, missday, bar_sec, is_front_future, reuse_exist_file=True)
+            for f in fn :
+                try :
+                    _,_,b=bar_by_file_ib(f,symbol)
+                    if len(b) > 0 :
+                        ba, td, col, bad_days = write_daily_bar(symbol, b,bar_sec=bar_sec, is_front=is_front, get_missing=False)
+                        tda+=td
+                        tda_bad+=bad_days
+                        if overwrite_dbar :
+                            for td0 in td :
+                                dbar_repo.remove_day(td0)
                         dbar_repo.update(ba, td, col, bar_sec)
-            except :
-                traceback.print_exc()
-                print 'problem processing file ', f
+                except :
+                    traceback.print_exc()
+                    print 'problem processing file ', f
 
-    return baa, tda, cola, tda_bad
+    tda.sort()
+    tda_bad.sort()
+    print 'Done! Bad Days: ', tda_bad
+    return tda, tda_bad
 
 
-def ingest_all_symb(sday, eday, repo_path=None, get_missing=False, sym_list = None, future_inclusion=['front','back'], sym_list_exclude=[]) :
+def ingest_all_symb(sday, eday, repo_path=None, get_missing=False, sym_list = None, future_inclusion=['front','back'], sym_list_exclude=[], overwrite_dbar=True) :
     """
     This will go to IB historical data, usually in /cygdrive/e/ib/kisco,
     read all the symbols defined by sym_list and update the repo at repo_path,
@@ -628,21 +653,20 @@ def ingest_all_symb(sday, eday, repo_path=None, get_missing=False, sym_list = No
         if sym in fut_sym and 'front' in future_inclusion:
             barsec = 1
             dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
-            baa, tda, cola, tda_bad = gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_front_future=True, is_fx=False, get_missing = get_missing)
+            gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_front_future=True, get_missing = get_missing, overwrite_dbar=overwrite_dbar)
         elif sym in fx_sym:
             barsec = 5
             dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
-            gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_fx=True, get_missing = get_missing)
+            gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, get_missing = get_missing, overwrite_dbar=overwrite_dbar)
 
         elif sym in etf_sym :
             barsec = 1
             dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
-            gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_etf=True, get_missing = get_missing)
+            gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_etf=True, get_missing = get_missing, overwrite_dbar=overwrite_dbar)
 
         if sym in fut_sym2 and 'back' in future_inclusion:
             barsec = 1
             repo_path_nc = repo.nc_repo_path(repo_path) # repo path of next contract
             dbar = repo.RepoDailyBar(sym, repo_path = repo_path_nc, create=True)
-            gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_front_future=False, get_missing = get_missing)
-
+            gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_front_future=False, get_missing = get_missing, overwrite_dbar=overwrite_dbar)
 
