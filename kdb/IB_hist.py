@@ -268,6 +268,19 @@ def write_daily_bar(symbol, bar, bar_sec=5, is_front=True, last_close_px=None, g
     return barr, good_trade_days, col_arr, bad_trade_days, last_close_px
 
 
+def clip_idx(utc, symbol, start_day, end_day) :
+    """
+    Find the two indexes for trading day start_day to end_day (inclusive). 
+    Return:
+    ix0, ix1, so that utc[ix0:ix1] are all the included time instances
+    """
+    sh, eh = l1.get_start_end_hour(symbol)
+    utc0 = l1.TradingDayIterator.local_ymd_to_utc(start_day, eh) - (eh-sh)*3600
+    utc1 = l1.TradingDayIterator.local_ymd_to_utc(end_day, eh)
+    ix0 = np.searchsorted(utc, utc0)
+    ix1 = np.searchsorted(utc, utc1+0.1)
+    return ix0, ix1
+
 def bar_by_file_ib_qtonly(fn) :
     """ 
     Mainly for FX, there is no trade, quote only in 5 second bar
@@ -310,7 +323,7 @@ def bar_by_file_ib_qtonly(fn) :
         os.system('gzip ' + f)
     return bar
 
-def bar_by_file_ib(fn, symbol, bar_qt=None,bar_trd=None) :
+def bar_by_file_ib(fn, symbol, start_day='19980101', end_day='20990101', bar_qt=None,bar_trd=None) :
     """ 
     _qt.csv and _trd.csv are expected to exist for the given fn
     """
@@ -318,7 +331,11 @@ def bar_by_file_ib(fn, symbol, bar_qt=None,bar_trd=None) :
     is_fx = l1.venue_by_symbol(symbol) == 'FX'
 
     if is_fx :
-        return [], [], bar_by_file_ib_qtonly(fn)
+        b0 = bar_by_file_ib_qtonly(fn)
+        if len(b0) > 0 :
+            ix0, ix1 = clip_idx(b0[:, 0], symbol, start_day, end_day)
+            return [], [], b0[ix0:ix1, :]
+        return [], [], b0
 
     if fn[-3:] == '.gz' :
         fn = fn[:-3]
@@ -454,8 +471,8 @@ def bar_by_file_ib(fn, symbol, bar_qt=None,bar_trd=None) :
             print 'gzip ' + f
             os.system('gzip ' + f)
 
-    return bar_qt, bar_trd, bar 
-
+    ix0, ix1 = clip_idx(bar[:,0], symbol, start_day, end_day)
+    return bar_qt, bar_trd, bar[ix0:ix1, :]
 
 def get_future_spread(symbol) :
     tick, mul = l1.asset_info(symbol)
@@ -561,7 +578,7 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
             else :
                 print 'Set barsec to ', bar_sec, ' from ', default_barsec
 
-        _,_,b=bar_by_file_ib(f,symbol)
+        _,_,b=bar_by_file_ib(f,symbol, start_day=sday, end_day=eday)
         if len(b) > 0 :
             ba, td, col, bad_days, last_px = write_daily_bar(symbol, b,bar_sec=bar_sec, is_front=is_front_future, get_missing=get_missing)
             if overwrite_dbar :
@@ -586,19 +603,14 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
         # there could be some duplication in files, so
         # so some files has bad days but otherwise already in other files.
         missday=[]
-        if len(tda) > 0 :
-            missday=[]
-            d0 = min(tda[0], tda_bad[0])
-            d1 = max(tda[-1], tda_bad[-1])
-            print ' checking on the missing days from %s to %s'%(d0, d1)
-            diter = l1.TradingDayIterator(d0)
-            while d0 <= d1 :
-                if d0 not in tda and d0 not in tda_bad and  d0 not in l1.bad_days and d0>=sday and d0<=eday :
-                    missday.append(d0)
-                diter.next()
-                d0=diter.yyyymmdd()
-        else :
-            print 'no days found for %s from %s to %s'%(symbol, sday, eday)
+        d0 = sday
+        print ' checking on the missing days from %s to %s'%(sday, eday)
+        diter = l1.TradingDayIterator(d0)
+        while d0 <= eday :
+            if d0 not in tda and d0 not in tda_bad and  d0 not in l1.bad_days :
+                missday.append(d0)
+            diter.next()
+            d0=diter.yyyymmdd()
 
         if len(missday) > 0 :
             print 'getting the missing days ', missing
@@ -613,7 +625,7 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
                         tda_bad+=bad_days
                         if overwrite_dbar :
                             for td0 in td :
-                                dbar_repo.remove_day(td0)
+                                dbar_repo.remove_day(td0,match_barsec=bar_sec)
                         dbar_repo.update(ba, td, col, bar_sec)
                 except :
                     traceback.print_exc()

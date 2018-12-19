@@ -80,6 +80,8 @@ class TradingDayIterator :
         However, strptime adjusts DST on 6am of a DST Sunday, instead of a 2am. 
         Bug fixing: on a Sunday of DST change, the timestamp is not accurate around
         that Sunday's 2am to 6am.  TODO: fix that issue as a low priority. 
+
+        Note ofst cannot be negative
         """
         ymdhms = '%s%02d%02d%02d'%(ymd, h_ofst, m_ofst,s_ofst)
         #dt=datetime.datetime.strptime(ymd,'%Y%m%d')

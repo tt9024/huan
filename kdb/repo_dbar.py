@@ -515,7 +515,18 @@ class RepoDailyBar :
                 bar = bar0
         return bar, col, bs
 
-    def remove_day(self, day) :
+    def remove_day(self, day, match_barsec=None) :
+        """
+        if match_barsec is not None then only remove the day if
+        the existing barsec matches with match_barsec
+        """
+
+        if match_barsec is not None:
+            bar, col, bs = self.load_day(day)
+            if bs != match_barsec :
+                print 'barsec not matched, day not removed!'
+                return
+
         print 'repo removing %s on %s'%(self.symbol, day)
         try :
             ret=self.idx['daily'].pop(day)
