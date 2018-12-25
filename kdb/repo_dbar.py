@@ -520,7 +520,6 @@ class RepoDailyBar :
         if match_barsec is not None then only remove the day if
         the existing barsec matches with match_barsec
         """
-
         if match_barsec is not None:
             bar, col, bs = self.load_day(day)
             if bs != match_barsec :

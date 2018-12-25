@@ -535,6 +535,10 @@ def fn_from_dates(symbol, sday, eday, is_front_future) :
     if len(ix) > 0 :
         print fns[ix+1], ' contained by ', fns[ix], ', removed, if needed, consider load and overwrite repo'
         fns = np.delete(fns, ix+1)
+
+    if len(fns) == 0 :
+        print 'ERROR! Nothing found for %s from %s to %s (front %s), search path %s'%(symbol, sday, eday, str(is_front_future), hist_path)
+
     return fns, is_fx, is_etf
 
 def get_barsec_from_file(f) :
@@ -585,8 +589,10 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
                 for td0 in td :
                     # assuming days in increasing order: don't delete days
                     # just written 
+
+                    # don't delete if the barsec does not match
                     if td0 not in tda :
-                        dbar_repo.remove_day(td0)
+                        dbar_repo.remove_day(td0, match_barsec=bar_sec)
             dbar_repo.update(ba, td, col, bar_sec)
             tda+=td
             tda_bad+=bad_days
@@ -598,8 +604,10 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
     tda_bad = list(set(tda_bad))
     tda_bad.sort()
 
+    if len(tda) == 0 :
+        print 'NOTHING found! Not getting any missing days!'
     # in case there are some entirely missed days
-    if get_missing :
+    elif get_missing :
         # there could be some duplication in files, so
         # so some files has bad days but otherwise already in other files.
         missday=[]
@@ -613,7 +621,7 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
             d0=diter.yyyymmdd()
 
         if len(missday) > 0 :
-            print 'getting the missing days ', missing
+            print 'getting the missing days ', missday
             from ibbar import get_missing_day
             fn = get_missing_day(symbol, missday, bar_sec, is_front_future, reuse_exist_file=True)
             for f in fn :
@@ -637,7 +645,7 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
     return tda, tda_bad
 
 
-def ingest_all_symb(sday, eday, repo_path=None, get_missing=False, sym_list = None, future_inclusion=['front','back'], sym_list_exclude=[], overwrite_dbar=True) :
+def ingest_all_symb(sday, eday, repo_path=None, get_missing=True, sym_list = None, future_inclusion=['front','back'], sym_list_exclude=[], overwrite_dbar=True) :
     """
     This will go to IB historical data, usually in /cygdrive/e/ib/kisco,
     read all the symbols defined by sym_list and update the repo at repo_path,
@@ -670,12 +678,10 @@ def ingest_all_symb(sday, eday, repo_path=None, get_missing=False, sym_list = No
             barsec = 5
             dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
             gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, get_missing = get_missing, overwrite_dbar=overwrite_dbar)
-
         elif sym in etf_sym :
             barsec = 1
             dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
             gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_etf=True, get_missing = get_missing, overwrite_dbar=overwrite_dbar)
-
         if sym in fut_sym2 and 'back' in future_inclusion:
             barsec = 1
             repo_path_nc = repo.nc_repo_path(repo_path) # repo path of next contract
