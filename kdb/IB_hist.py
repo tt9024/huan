@@ -690,7 +690,7 @@ def ingest_all_symb(sday, eday, repo_path=None, get_missing=True, sym_list = Non
         elif sym in etf_sym :
             barsec = 1
             dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
-            gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_etf=True, get_missing = get_missing, overwrite_dbar=overwrite_dbar)
+            gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, get_missing = get_missing, overwrite_dbar=overwrite_dbar)
         if sym in fut_sym2 and 'back' in future_inclusion:
             barsec = 1
             repo_path_nc = repo.nc_repo_path(repo_path) # repo path of next contract
