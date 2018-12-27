@@ -118,7 +118,12 @@ def write_daily_bar(symbol, bar, bar_sec=5, is_front=True, last_close_px=None, g
                 print 'getting missing day %s'%(day1)
                 from ibbar import get_missing_day
                 fn = get_missing_day(symbol, [day1], bar_sec=bar_sec, is_front=is_front, reuse_exist_file=True)
-                _,_,b0=bar_by_file_ib(fn[0],symbol)
+                try :
+                    _,_,b0=bar_by_file_ib(fn[0],symbol)
+                except Exception as e :
+                    print e
+                    b0 = []
+
                 if len(b0) > j-i :
                     print 'Getting more bars %d > %d on %s for %s, take it!'%(len(b0), j-i, day1, symbol)
                     barr0, trade_days0, col_arr0, bad_trade_days0, last_close_px0=write_daily_bar(symbol, b0, bar_sec=bar_sec, is_front=is_front, last_close_px=last_close_px, get_missing=False)
@@ -582,7 +587,11 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
             else :
                 print 'Set barsec to ', bar_sec, ' from ', default_barsec
 
-        _,_,b=bar_by_file_ib(f,symbol, start_day=sday, end_day=eday)
+        try :
+            _,_,b=bar_by_file_ib(f,symbol, start_day=sday, end_day=eday)
+        except Exception as e :
+            print e
+            b = []
         if len(b) > 0 :
             ba, td, col, bad_days, last_px = write_daily_bar(symbol, b,bar_sec=bar_sec, is_front=is_front_future, get_missing=get_missing)
             if overwrite_dbar :
@@ -628,7 +637,7 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
                 try :
                     _,_,b=bar_by_file_ib(f,symbol)
                     if len(b) > 0 :
-                        ba, td, col, bad_days = write_daily_bar(symbol, b,bar_sec=bar_sec, is_front=is_front, get_missing=False)
+                        ba, td, col, bad_days = write_daily_bar(symbol, b,bar_sec=bar_sec, is_front=is_front_future, get_missing=False)
                         tda+=td
                         tda_bad+=bad_days
                         if overwrite_dbar :
