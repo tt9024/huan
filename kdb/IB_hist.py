@@ -637,13 +637,16 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
                 try :
                     _,_,b=bar_by_file_ib(f,symbol)
                     if len(b) > 0 :
-                        ba, td, col, bad_days = write_daily_bar(symbol, b,bar_sec=bar_sec, is_front=is_front_future, get_missing=False)
+                        ba, td, col, bad_days, lastpx0 = write_daily_bar(symbol, b,bar_sec=bar_sec, is_front=is_front_future, get_missing=False)
                         tda+=td
                         tda_bad+=bad_days
-                        if overwrite_dbar :
-                            for td0 in td :
-                                dbar_repo.remove_day(td0,match_barsec=bar_sec)
-                        dbar_repo.update(ba, td, col, bar_sec)
+                        if len(td) > 0 :
+                            if overwrite_dbar :
+                                for td0 in td :
+                                    dbar_repo.remove_day(td0,match_barsec=bar_sec)
+                            dbar_repo.update(ba, td, col, bar_sec)
+                        else :
+                            print 'nothing got for missing days ', missday
                 except :
                     traceback.print_exc()
                     print 'problem processing file ', f
