@@ -288,8 +288,11 @@ def clip_idx(utc, symbol, start_day, end_day) :
 
 def bar_by_file_ib_qtonly(fn) :
     """ 
-    Mainly for FX, there is no trade, quote only in 5 second bar
+    Read only the quotes, mainly for FX, or other cases 
+    (such as some sparse back contract) when there is no trade.
     _qt.csv expected to exist for the given fn
+    return same format as bar_by_file_ib, adding vwap as close px
+    and v as all 0
     """
 
     if fn[-3:] == '.gz' :
@@ -335,13 +338,6 @@ def bar_by_file_ib(fn, symbol, start_day='19980101', end_day='20990101', bar_qt=
     bid_ask_spd = get_future_spread(symbol)
     is_fx = l1.venue_by_symbol(symbol) == 'FX'
 
-    if is_fx :
-        b0 = bar_by_file_ib_qtonly(fn)
-        if len(b0) > 0 :
-            ix0, ix1 = clip_idx(b0[:, 0], symbol, start_day, end_day)
-            return [], [], b0[ix0:ix1, :]
-        return [], [], b0
-
     if fn[-3:] == '.gz' :
         fn = fn[:-3]
     if fn[-4:] == '.csv' :
@@ -349,6 +345,16 @@ def bar_by_file_ib(fn, symbol, start_day='19980101', end_day='20990101', bar_qt=
     fnqt=fn+'_qt.csv'
     fntd=fn+'_trd.csv'
     print 'readig ', fn
+
+    has_trd = l1.get_file_size(fntd)>0 or l1.get_file_size(fntd+'.gz')>0 
+    if is_fx or not has_trd:
+        print 'Getting Quote Only!'
+        b0 = bar_by_file_ib_qtonly(fn)
+        if len(b0) > 0 :
+            ix0, ix1 = clip_idx(b0[:, 0], symbol, start_day, end_day)
+            return [], [], b0[ix0:ix1, :]
+        return [], [], b0
+
     # getting gzip if necessary
     gz = False
     for b, f in zip([bar_qt, bar_trd],[fnqt, fntd]) :
@@ -389,18 +395,26 @@ def bar_by_file_ib(fn, symbol, start_day='19980101', end_day='20990101', bar_qt=
     # but the _trd.csv only has to 3/2 as file name suggests.  
     # In this case, take the shorter one and ensure the days
     # checked for gaps in between for missing days
+    # Only exception is when there is only one day, then 
 
     while True :
         if len(qts) < 10 :
             return [],[],[]
-        dtq0 = datetime.datetime.fromtimestamp(qts[0])
-        dtt0 = datetime.datetime.fromtimestamp(tts[0])
-        dtq1 = datetime.datetime.fromtimestamp(qts[-1])
-        dtt1 = datetime.datetime.fromtimestamp(tts[-1])
+        #dtq0 = datetime.datetime.fromtimestamp(qts[0])
+        #dtt0 = datetime.datetime.fromtimestamp(tts[0])
+        #dtq1 = datetime.datetime.fromtimestamp(qts[-1])
+        #dtt1 = datetime.datetime.fromtimestamp(tts[-1])
+
+        dtq0 = l1.trd_day(qts[0])
+        dtt0 = l1.trd_day(tts[0])
+        dtq1 = l1.trd_day(qts[-1])
+        dtt1 = l1.trd_day(tts[-1])
         print 'Got Quote: ',  dtq0, ' to ', dtq1, ' Trade: ', dtt0, ' to ', dtt1
 
-        if (qts[-1] != tts[-1]) :
-            print '!!! Quote/Trade ending mismatch!!!'
+        #if (qts[-1] != tts[-1]) :
+        if dtq1 != dtt1 :
+            # only handles where ending date is different
+            print '!!! Quote/Trade ending date mismatch!!!'
             ts = min(qts[-1], tts[-1])
             if qts[-1] > ts :
                 ix = np.nonzero(qts>ts)[0]
@@ -410,8 +424,9 @@ def bar_by_file_ib(fn, symbol, start_day='19980101', end_day='20990101', bar_qt=
                 ix = np.nonzero(tts>ts)[0]
                 tts = tts[:ix[0]]
                 bar_trd = bar_trd[:ix[0], :]
-        elif (qts[0] != tts[0]) :
-            print '!!! Quote/Trade starting mismatch!!!'
+        #elif (qts[0] != tts[0]) :
+        elif dtq0 != dtt0 :
+            print '!!! Quote/Trade date starting mismatch!!!'
             ts = max(qts[0], tts[0])
             if qts[0] < ts :
                 ix = np.nonzero(qts<ts)[0]
@@ -556,7 +571,7 @@ def get_barsec_from_file(f) :
                 pass
     raise ValueError('no barsec detected in file %s'%(f))
 
-def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_future=True, get_missing=True, barsec_from_file=True, overwrite_dbar=False) :
+def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_future=True, get_missing=True, barsec_from_file=True, overwrite_dbar=False, EarliestMissingDay='19980101') :
     """
     generate IB dily bars from sday to eday.
     It is intended to be used to add too the daily bar repo manually
@@ -620,8 +635,9 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
         # there could be some duplication in files, so
         # so some files has bad days but otherwise already in other files.
         missday=[]
-        d0 = sday
-        print ' checking on the missing days from %s to %s'%(sday, eday)
+        d0 = max(sday, EarliestMissingDay)
+        print ' checking on the missing days from %s to %s'%(d0, eday)
+
         diter = l1.TradingDayIterator(d0)
         while d0 <= eday :
             if d0 not in tda and d0 not in tda_bad and  d0 not in l1.bad_days :
@@ -657,7 +673,7 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
     return tda, tda_bad
 
 
-def ingest_all_symb(sday, eday, repo_path=None, get_missing=True, sym_list = None, future_inclusion=['front','back'], sym_list_exclude=[], overwrite_dbar=True) :
+def ingest_all_symb(sday, eday, repo_path=None, get_missing=True, sym_list = None, future_inclusion=['front','back'], sym_list_exclude=[], overwrite_dbar=True, EarliestMissingDay='20180401') :
     """
     This will go to IB historical data, usually in /cygdrive/e/ib/kisco,
     read all the symbols defined by sym_list and update the repo at repo_path,
@@ -685,11 +701,11 @@ def ingest_all_symb(sday, eday, repo_path=None, get_missing=True, sym_list = Non
         if sym in fut_sym and 'front' in future_inclusion:
             barsec = 1
             dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
-            gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_front_future=True, get_missing = get_missing, overwrite_dbar=overwrite_dbar)
+            gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_front_future=True, get_missing = get_missing, overwrite_dbar=overwrite_dbar,EarliestMissingDay=EarliestMissingDay)
         elif sym in fx_sym:
             barsec = 5
             dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
-            gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, get_missing = get_missing, overwrite_dbar=overwrite_dbar)
+            gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, get_missing = get_missing, overwrite_dbar=overwrite_dbar, EarliestMissingDay=EarliestMissingDay)
         elif sym in etf_sym :
             barsec = 1
             dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
@@ -698,5 +714,5 @@ def ingest_all_symb(sday, eday, repo_path=None, get_missing=True, sym_list = Non
             barsec = 1
             repo_path_nc = repo.nc_repo_path(repo_path) # repo path of next contract
             dbar = repo.RepoDailyBar(sym, repo_path = repo_path_nc, create=True)
-            gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_front_future=False, get_missing = get_missing, overwrite_dbar=overwrite_dbar)
+            gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_front_future=False, get_missing = get_missing, overwrite_dbar=overwrite_dbar, EarliestMissingDay=EarliestMissingDay)
 

@@ -126,7 +126,7 @@ def trd_day(utc=None) :
         utc = TradingDayIterator.cur_utc()
     dt = datetime.datetime.fromtimestamp(utc)
     yyyymmdd = dt.strftime('%Y%m%d')
-    if dt.hour >= 17 :
+    if dt.hour > 17 or dt.weekday() > 4:
         it = TradingDayIterator(yyyymmdd, adj_start=False)
         it.next()
         yyyymmdd=it.yyyymmdd()
@@ -147,6 +147,7 @@ BiMonthlyFrontContract =  ['G','J','J','M','M','Q','Q','V','V','Z','Z','G']
 GCMonthlyFrontContract =  ['G','J','J','M','M','Q','Q','Z','Z','Z','Z','G']
 HGMonthlyFrontContract =  ['H','H','K','K','N','N','U','U','Z','Z','Z','H']
 QuartlyFrontContract =    ['H','H','H','M','M','M','U','U','U','Z','Z','Z']
+QuartlyFrontContractNt=   ['H','H','M','M','M','U','U','U','Z','Z','Z','H']
 OddMonthlyFrontContract = ['H','H','K','K','N','N','U','U','Z','Z','Z','H']
 SoybeanFrontContract =    ['H','H','K','K','N','N','X','X','X','X','F','F']
 SoybeanMealFrontContract= ['H','H','K','K','N','N','Z','Z','Z','Z','Z','F']
@@ -167,9 +168,9 @@ RollDates = {'CL':  [MonthlyFrontContract,   [14, 14, 14, 14, 14, 14, 14, 14, 14
              'HO':  [MonthlyFrontContract,   [26, 24, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26]], \
              'RB':  [MonthlyFrontContract,   [26, 24, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26]], \
              'ES':  [QuartlyFrontContract,   [31, 31, 12, 31, 31, 12, 31, 31, 12, 31, 31, 12]], \
-             'ZB':  [QuartlyFrontContract,   [31, 31,  1, 31, 31,  1, 31, 31,  1, 31, 31,  1]], \
-             'ZN':  [QuartlyFrontContract,   [31, 31,  1, 31, 31,  1, 31, 31,  1, 31, 31,  1]], \
-             'ZF':  [QuartlyFrontContract,   [31, 31,  1, 31, 31,  1, 31, 31,  1, 31, 31,  1]], \
+             'ZB':  [QuartlyFrontContractNt, [31, 27, 31, 31, 27, 31, 31, 27, 31, 31, 27, 31]], \
+             'ZN':  [QuartlyFrontContractNt, [31, 27, 31, 31, 27, 31, 31, 27, 31, 31, 27, 31]], \
+             'ZF':  [QuartlyFrontContractNt, [31, 27, 31, 31, 27, 31, 31, 27, 31, 31, 27, 31]], \
              #'US':  [QuartlyFrontContract,   [31, 31,  1, 31, 31,  1, 31, 31,  1, 31, 31,  1]], \
              #'TY':  [QuartlyFrontContract,   [31, 31,  1, 31, 31,  1, 31, 31,  1, 31, 31,  1]], \
              #'FV':  [QuartlyFrontContract,   [31, 31,  1, 31, 31,  1, 31, 31,  1, 31, 31,  1]], \
@@ -206,8 +207,9 @@ SymbolTicks = {'CL':0.01, 'NG':0.001, 'HO':0.0001, 'RB':0.0001, 'GC':0.1, 'SI':0
                'ZB':0.03125, 'ZN':0.015625,'ZF':0.0078125, 'ZC':0.0025, 'ZS':0.0025, 'ZL':0.0001,'ZM':0.1, 'ZW':0.0025, \
                'FDX':0.5, 'STXE':1, 'FGBX':0.02, 'FGBL':0.01, 'FGBS':0.005,'FGBM':0.01, \
                'LCO':0.01, 'LFU':0.25, 'LOU':0.0001, \
-               'CC':1 ,'CT':0.01,'SB':0.01,'KC':0.05 \
-               }
+               'CC':1 ,'CT':0.01,'SB':0.01,'KC':0.05 ,\
+               'ATX':0.01, 'AP':0.001, 'TSX':0.01, 'HSI':0.01,'K200':0.01,'Y':0.5,'MXY':0.01,'N225':0.1,'OMXS30':0.01,'VIX':0.01}
+
 SymbolMul= { 'CL':1000, 'NG':10000, 'HO':42000, 'RB': 42000, 'GC': 100, 'SI':5000, 'HG': 25000, 'PA': 100, \
              'ES':50, 'HE':40000, 'LE':40000, 'GE': 2500, \
              '6A':100000, '6C':100000, '6E':125000, '6B':62500, '6J':12500000, '6N':100000, '6R':2500000, '6Z':500000, '6M':500000, \
@@ -237,14 +239,44 @@ ven_sym_map={'NYM':['CL','NG','HO','RB','GC','SI','HG','PA'], \
              'ETF':['EEM','EPI','EWJ','EWZ','EZU','FXI','GDX','ITB','KRE','QQQ','RSX','SPY','UGAZ','USO','VEA','VXX','XLE','XLF','XLK','XLU','XOP'],\
              'ICE':['LCO','LFU','LOU'], \
              # NYBOT no permission from IB yet 
-             'NYBOT':['CC','CT','SB','KC']};
+             'NYBOT':['CC','CT','SB','KC'], \
+             'IDX':['ATX','HSI','K200','N225','VIX','AP','TSX','Y','MXY','OMXS30']}
 
 ICEFutures = ven_sym_map['ICE']
 future_venues=['NYM','CME','CBT','EUX','ICE','NYBOT']
 fx_venues=['FX']
 
-HoursDefines={'CMEAgriHours':[-4, 15], 'CMELiveStockHours':[9, 15], 'ICEHours':[-4, 18], 'CocoaHours':[4,14], 'CottonHours':[-3, 15], 'SugarHours':[3,13], 'USStockHours':[9,16], 'EUXHours':[2,16]}
-start_stop_hours_symbol={'CMEAgriHours': ['ZC','ZW','ZS','ZM','ZL'], 'CMELiveStockHours': ['HE', 'LE'], 'ICEHours':['LCO','LFU','LOU'], 'CocoaHours':['CC','KC'], 'CottonHours':['CT'], 'SugarHours':['SB'], 'USStockHours':['ETF'], 'EUXHours':['FDX','STXE','FGBX','FGBL','FGBS','FGBM']}
+HoursDefines={'CMEAgriHours':[-4, 15], \
+              'CMELiveStockHours':[9, 15], \
+              'ICEHours':[-4, 18], \
+              'CocoaHours':[4,14], \
+              'CottonHours':[-3, 15], \
+              'SugarHours':[3,13], \
+              'USStockHours':[9,16], \
+              'EUXHours':[2,16], \
+              }
+
+start_stop_hours_symbol={\
+        'CMEAgriHours':      {'sym':['ZC','ZW','ZS','ZM','ZL'], 'hour':[-4, 15]},\
+        'CMELiveStockHours': {'sym':['HE', 'LE'],               'hour':[9, 15]},\
+        'ICEHours':          {'sym':['LCO','LFU','LOU'],        'hour':[-4, 18]}, \
+        'CocoaHours':        {'sym':['CC','KC'],                'hour':[4,14]},\
+        'CottonHours':       {'sym':['CT'],                     'hour':[-3, 15]},\
+        'SugarHours':        {'sym':['SB'],                     'hour':[3,13]},\
+        'USStockHours':      {'sym':['ETF'],                    'hour':[9,16]},\
+        'EUXHours':          {'sym':['FDX','STXE','FGBX','FGBL','FGBS','FGBM'], 'hour':[2,16]},\
+        'VSEHours':          {'sym':['ATX'],'hour':[3, 11]},\
+        'ASXHours':          {'sym':['AP'],'hour':[-6,1]},\
+        'TSEHours':          {'sym':['TSX'],'hour':[9,17]},\
+        'HKFEHours':         {'sym':['HSI'],'hour':[-4,3]},\
+        'KSEHours':          {'sym':['K200'],'hour':[-6,2]},\
+        'ICEEUHours':        {'sym':['Y'],'hour':[3,14]},\
+        'PSEHours':          {'sym':['MXY'],'hour':[9,16]},\
+        'OSEHours':          {'sym':['N225'],'hour':[-5,1]},\
+        'OMSHours':          {'sym':['OMXS30'],'hour':[3,12]},\
+        'CBOEHours':         {'sym':['VIX'],'hour':[3,17]}\
+        }
+
 def venue_by_symbol(symbol) :
     for k,v in ven_sym_map.items() :
         if symbol in v :
@@ -262,9 +294,10 @@ def get_start_end_hour(symbol) :
     To add other non cme/ice venues, such as IDX and FX venues
     """
     for h in start_stop_hours_symbol.keys() :
-        svlist = start_stop_hours_symbol[h] # could be either symbol or venue
+        sv = start_stop_hours_symbol[h] 
+        svlist = sv['sym'] # could be either symbol or venue
         if symbol in svlist or venue_by_symbol(symbol) in svlist :
-            return HoursDefines[h]
+            return sv['hour']
 
     #default Future and FX hours
     return -6, 17
