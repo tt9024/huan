@@ -246,15 +246,15 @@ ICEFutures = ven_sym_map['ICE']
 future_venues=['NYM','CME','CBT','EUX','ICE','NYBOT']
 fx_venues=['FX']
 
-HoursDefines={'CMEAgriHours':[-4, 15], \
-              'CMELiveStockHours':[9, 15], \
-              'ICEHours':[-4, 18], \
-              'CocoaHours':[4,14], \
-              'CottonHours':[-3, 15], \
-              'SugarHours':[3,13], \
-              'USStockHours':[9,16], \
-              'EUXHours':[2,16], \
-              }
+#HoursDefines={'CMEAgriHours':[-4, 15], \
+#              'CMELiveStockHours':[9, 15], \
+#              'ICEHours':[-4, 18], \
+#              'CocoaHours':[4,14], \
+#              'CottonHours':[-3, 15], \
+#              'SugarHours':[3,13], \
+#              'USStockHours':[9,16], \
+#              'EUXHours':[2,16], \
+#              }
 
 start_stop_hours_symbol={\
         'CMEAgriHours':      {'sym':['ZC','ZW','ZS','ZM','ZL'], 'hour':[-4, 15]},\
@@ -265,16 +265,16 @@ start_stop_hours_symbol={\
         'SugarHours':        {'sym':['SB'],                     'hour':[3,13]},\
         'USStockHours':      {'sym':['ETF'],                    'hour':[9,16]},\
         'EUXHours':          {'sym':['FDX','STXE','FGBX','FGBL','FGBS','FGBM'], 'hour':[2,16]},\
-        'VSEHours':          {'sym':['ATX'],'hour':[3, 11]},\
-        'ASXHours':          {'sym':['AP'],'hour':[-6,1]},\
-        'TSEHours':          {'sym':['TSX'],'hour':[9,17]},\
-        'HKFEHours':         {'sym':['HSI'],'hour':[-4,3]},\
-        'KSEHours':          {'sym':['K200'],'hour':[-6,2]},\
-        'ICEEUHours':        {'sym':['Y'],'hour':[3,14]},\
-        'PSEHours':          {'sym':['MXY'],'hour':[9,16]},\
-        'OSEHours':          {'sym':['N225'],'hour':[-5,1]},\
-        'OMSHours':          {'sym':['OMXS30'],'hour':[3,12]},\
-        'CBOEHours':         {'sym':['VIX'],'hour':[3,17]}\
+        'VSEHours':          {'sym':['ATX'],                    'hour':[3, 11]},\
+        'ASXHours':          {'sym':['AP'],                     'hour':[-6,1]},\
+        'TSEHours':          {'sym':['TSX'],                    'hour':[9,17]},\
+        'HKFEHours':         {'sym':['HSI'],                    'hour':[-4,3]},\
+        'KSEHours':          {'sym':['K200'],                   'hour':[-6,2]},\
+        'ICEEUHours':        {'sym':['Y'],                      'hour':[3,14]},\
+        'PSEHours':          {'sym':['MXY'],                    'hour':[9,16]},\
+        'OSEHours':          {'sym':['N225'],                   'hour':[-5,1]},\
+        'OMSHours':          {'sym':['OMXS30'],                 'hour':[3,12]},\
+        'CBOEHours':         {'sym':['VIX'],                    'hour':[3,17]}\
         }
 
 def venue_by_symbol(symbol) :
