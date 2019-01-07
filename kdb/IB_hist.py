@@ -119,7 +119,7 @@ def write_daily_bar(symbol, bar, bar_sec=5, is_front=True, last_close_px=None, g
                 from ibbar import get_missing_day
                 fn = get_missing_day(symbol, [day1], bar_sec=bar_sec, is_front=is_front, reuse_exist_file=True)
                 try :
-                    _,_,b0=bar_by_file_ib(fn[0],symbol)
+                    _,_,b0=bar_by_file_ib(fn[0],symbol, start_day=day1, end_day=day1)
                 except Exception as e :
                     print e
                     b0 = []
@@ -549,15 +549,22 @@ def fn_from_dates(symbol, sday, eday, is_front_future) :
     dss=np.array(ds)[ix]
     des=np.array(de)[ix]
     fns=np.array(fn)[ix]
-    # remove the files that are contained
-    desi=des.astype(int)
-    ix = np.nonzero(desi[1:]-desi[:-1]<=0)[0]
-    if len(ix) > 0 :
-        print fns[ix+1], ' contained by ', fns[ix], ', removed, if needed, consider load and overwrite repo'
-        fns = np.delete(fns, ix+1)
 
-    if len(fns) == 0 :
-        print 'ERROR! Nothing found for %s from %s to %s (front %s), search path %s'%(symbol, sday, eday, str(is_front_future), hist_path)
+    while True :
+        if len(fns) == 0 :
+            print 'ERROR! Nothing found for %s from %s to %s (front %s), search path %s'%(symbol, sday, eday, str(is_front_future), hist_path)
+            break
+
+        # remove the files that are contained
+        desi=des.astype(int)
+        ix = np.nonzero(desi[1:]-desi[:-1]<=0)[0]
+        if len(ix) > 0 :
+            print fns[ix+1], ' contained by ', fns[ix], ', removed, if needed, consider load and overwrite repo'
+            fns = np.delete(fns, ix+1)
+            des = np.delete(des, ix+1)
+            dss = np.delete(dss, ix+1)
+        else :
+            break
 
     return fns, is_fx, is_etf
 
