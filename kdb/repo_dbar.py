@@ -4,6 +4,7 @@ import copy
 import os
 import traceback
 import pandas as pd
+import datetime
 
 # This is the repository for storing
 # daily bars of all assets.  Each asset
@@ -645,3 +646,49 @@ class RepoDailyBar :
         df=pd.DataFrame(v)
         df.fillna(method='ffill',inplace=True)
         df.fillna(method='bfill',inplace=True)
+
+
+################################################
+#  Some test procedures for verifying repo data#
+################################################
+
+def getdt(utcarr) :
+    dt = []
+    for utc in utcarr :
+        dt.append(datetime.datetime.fromtimestamp(utc))
+    return dt
+
+def plot_repo(repo_path_arr, symbol_arr, sday, eday) :
+    """
+    For each symbol in symbol_arr :
+        create a new figure
+        for each repo in repo_arr :
+            plot lr, lpx and vbs
+    
+    The goal is to visually inspect any problem for the repo data
+    """
+    import pylab as pl
+    for sym in symbol_arr :
+        tstr = '%s from %s to %s'%(sym, sday, eday)
+        fig = pl.figure()
+        ax1 = fig.add_subplot(3,1,1)
+        ax1.set_title(tstr)
+        ax2 = fig.add_subplot(3,1,2,sharex=ax1)
+        ax3 = fig.add_subplot(3,1,3,sharex=ax1)
+        ax1.grid() ; ax2.grid() ; ax3.grid()
+        for rp in repo_path_arr :
+            rpstr = rp.split('/')[-1]
+            dbar = RepoDailyBar(sym, repo_path=rp)
+            bar5m = dbar.daily_bar(sday, 0, 300, end_day=eday, group_days=1); 
+            bar5m = np.vstack(bar5m)
+            dt = getdt(bar5m[:, 0])
+            lr = bar5m[:, 1]
+            vbs = bar5m[:, 3]
+            lpx = bar5m[:, 4]
+         
+            ax1.plot(dt, lpx, label=rpstr)
+            ax2.plot(dt, np.cumsum(lr), label=rpstr)
+            ax3.plot(dt, np.cumsum(vbs), label=rpstr)
+
+        pl.gcf().autofmt_xdate()
+        pl.legend(loc='best')
