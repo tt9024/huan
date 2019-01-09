@@ -547,6 +547,13 @@ class RepoDailyBar :
         write bar to repo
         """
         assert self._get_totalbars(bar_sec) == len(bar), bfn + ' wrong size: '+str(len(bar)) + ' should be ' + str(self._get_totalbars(bar_sec)) 
+
+        if utcc in col :
+            # check on the utc against the daily range
+            u0 = self._make_daily_utc(day, bar_sec)
+            utc0 = bar[:, ci(col,utcc)]
+            self._check_utc(u0, utc0)
+
         self.idx['daily'][day] = {'bar_sec':bar_sec, 'cols':copy.deepcopy(col)}
         bfn = self.path+'/daily/'+day+'/bar.npz'
         # check for existance of self.path in case the
@@ -570,6 +577,15 @@ class RepoDailyBar :
         u0 = u1 - totbar*bar_sec + bar_sec
         return np.arange(u0, u1+bar_sec, bar_sec)
  
+    def _check_utc(self, utc_ref, utc_bar) :
+        """
+        check if the utc_bar is within the range of utc_ref
+        and utc_bar is strickly increasing
+        """
+        assert utc_bar[-1] >= utc_ref[0] and utc_bar[0] <= utc_ref[-1], ' wrong time stamp: utc_ref(%d-%d), utc_bar(%d-%d)'%(utc_ref[0], utc_ref[-1], utc_bar[0], utc_bar[-1])
+        d0 = np.nonzero(utc_bar[1:] - utc_bar[:-1] <= 0)[0]
+        assert len(d0) == 0 , 'update time stamp not strickly: utc_bar(%d:%d, %d:%d)'%(d0[0], utc_bar[d0[0]], d[0]+1,utc_bar[d0[0]+1])
+
     def _fill_daily_bar_col(self, day, bar_sec, col_arr) :
         """
         first bar starts at the previous day's start_hour+bar_sec, last bar ends at this day's last bar
@@ -591,6 +607,7 @@ class RepoDailyBar :
     def _scale(self,day,b,c,bs, tgt_cols, tgt_bs) :
         utc0 = b[:, ci(c,utcc)]
         utc1 = self._make_daily_utc(day, tgt_bs)
+        self._check_utc(utc0, utc1)
 
         ix = np.searchsorted(utc0, utc1)
         assert len(np.nonzero(utc0[ix]-utc1 != 0)[0]) == 0, 'problem scaling: utc mismatch on ' + day

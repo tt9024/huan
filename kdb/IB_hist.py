@@ -60,12 +60,21 @@ def write_daily_bar(symbol, bar, bar_sec=5, is_front=True, last_close_px=None, g
     utc_s = int(l1.TradingDayIterator.local_ymd_to_utc(day_start, start_hour, 0, 0))
     if last_close_px is None :
         x=np.searchsorted(bar[1:,0], float(utc_s)-1e-6)
-        if x == 0 :
-            last_close_px = bar[0, 2]
-            print 'last close price set as the first bar open px, this should use previous contract'
+
+        # only take the last price within 1 minutes of utc_s
+        if x+1 >= bar.shape[0] or bar[x+1, 0] - utc_s > 60 :
+            if x+1>=bar.shape[0] :
+                print 'no bars found after the start utc of ', day_start
+            else :
+                print 'start up utc (%d) 60 minutes later than start utc (%d) on %s'%(bar[x+1,0], utc_s, day_start)
+                print 'initializing start up last_close_px deferred'
         else :
-            last_close_px=bar[x,5]
-            print 'last close price set to previous close at ', datetime.datetime.fromtimestamp(bar[x,0]), ' px: ', last_close_px
+            if x == 0 :
+                last_close_px = bar[0, 2]
+                print 'last close price set as the first bar open px, this should use previous contract', datetime.datetime.fromtimestamp(bar[0,0]), datetime.datetime.fromtimestamp(bar[1,0])
+            else :
+                last_close_px=bar[x,5]
+                print 'last close price set to previous close at ', datetime.datetime.fromtimestamp(bar[x,0]), ' px: ', last_close_px
     else :
         print 'GIVEN last close price ', last_close_px
 
@@ -171,6 +180,10 @@ def write_daily_bar(symbol, bar, bar_sec=5, is_front=True, last_close_px=None, g
 
             # construct the log returns for each bar, fill in zeros for gap
             #lpx_open=np.log(bar0[:,2])
+            if last_close_px is None :
+                print 'setting last_close_px to ', bar0[0,2]
+                last_close_px = bar0[0, 2]
+
             lpx_open=np.log(np.r_[last_close_px,bar0[:-1,5]])
             lpx_hi=np.log(bar0[:,3])
             lpx_lo=np.log(bar0[:,4])
@@ -286,6 +299,30 @@ def clip_idx(utc, symbol, start_day, end_day) :
     ix1 = np.searchsorted(utc, utc1+0.1)
     return ix0, ix1
 
+def get_trd (fntd) :
+    if l1.get_file_size(fntd+'.gz')>100 :
+        os.system('gunzip ' + fntd + '.gz')
+    try :
+        print 'reading trd ', fntd
+        bar_trd=np.genfromtxt(fntd, delimiter=',',usecols=[0,1,2,3,4,5,6,7]) #,dtype=[('utc','i8'),('open','<f8'),('high','<f8'),('low','<f8'),('close','<f8'),('vol','i8'),('cnt','i8'),('wap','<f8')])
+        os.system('gzip -f ' + fntd)
+    except :
+        print 'no trade for ', fntd
+        bar_trd = []
+    return bar_trd
+
+def get_qt(fnqt) :
+    if l1.get_file_size(fnqt+'.gz')>100 :
+        os.system('gunzip ' + fnqt + '.gz')
+    try :
+        print 'reading quote ', fnqt
+        bar_qt=np.genfromtxt(fnqt, delimiter=',',usecols=[0,1,2,3,4]) #, dtype=[('utc','i8'),('open','<f8'),('high','<f8'),('low','<f8'),('close','<f8')])
+        os.system('gzip -f ' + fnqt)
+    except :
+        print 'no quotes for ', fnqt
+        bar_qt = []
+    return bar_qt
+
 def bar_by_file_ib_qtonly(fn) :
     """ 
     Read only the quotes, mainly for FX, or other cases 
@@ -300,20 +337,7 @@ def bar_by_file_ib_qtonly(fn) :
     if fn[-4:] == '.csv' :
         fn = fn[:-7]
     fnqt=fn+'_qt.csv'
-    print 'readig ', fn
-    # getting gzip if necessary
-    gz = False
-    f = fnqt
-    if l1.get_file_size(f) == 0 :
-        if l1.get_file_size(f+'.gz') > 0 :
-            print 'got gziped file ', f+'.gz', ' unzip it'
-            os.system('gunzip ' + f + '.gz')
-            gz = True
-        else :
-            raise ValueError('file not found: ' + f)
-
-    import pandas as pd
-    bar_qt=np.genfromtxt(fnqt, delimiter=',',usecols=[0,1,2,3,4]) #, dtype=[('utc','i8'),('open','<f8'),('high','<f8'),('low','<f8'),('close','<f8')])
+    bar_qt=get_qt(fnqt)
     nqt =  bar_qt.shape[0]
     assert nqt > 3,  'too few bars found at ' + fn
 
@@ -326,9 +350,6 @@ def bar_by_file_ib_qtonly(fn) :
     vwap = bar_qt[:, 4]
     v = np.zeros((3, len(ts)))
     bar=np.vstack((bar_qt[:,0],ts,bar_qt[:,1:5].T,vwap,v)).T
-    if gz : 
-        print 'gzip ' + f
-        os.system('gzip ' + f)
     return bar
 
 def bar_by_file_ib(fn, symbol, start_day='19980101', end_day='20990101', bar_qt=None,bar_trd=None) :
@@ -344,35 +365,20 @@ def bar_by_file_ib(fn, symbol, start_day='19980101', end_day='20990101', bar_qt=
         fn = fn[:-7]
     fnqt=fn+'_qt.csv'
     fntd=fn+'_trd.csv'
-    print 'readig ', fn
 
-    has_trd = l1.get_file_size(fntd)>0 or l1.get_file_size(fntd+'.gz')>0 
-    if is_fx or not has_trd:
-        print 'Getting Quote Only!'
-        b0 = bar_by_file_ib_qtonly(fn)
-        if len(b0) > 0 :
-            ix0, ix1 = clip_idx(b0[:, 0], symbol, start_day, end_day)
-            return [], [], b0[ix0:ix1, :]
-        return [], [], b0
-
-    # getting gzip if necessary
-    gz = False
-    for b, f in zip([bar_qt, bar_trd],[fnqt, fntd]) :
-        if b is not None :
-            continue
-        if l1.get_file_size(f) == 0 :
-            if l1.get_file_size(f+'.gz') > 0 :
-                print 'got gziped file ', f+'.gz', ' unzip it'
-                os.system('gunzip ' + f + '.gz')
-                gz = True
-            else :
-                raise ValueError('file not found: ' + f)
-
-    import pandas as pd
-    if bar_qt is None :
-        bar_qt=np.genfromtxt(fnqt, delimiter=',',usecols=[0,1,2,3,4]) #, dtype=[('utc','i8'),('open','<f8'),('high','<f8'),('low','<f8'),('close','<f8')])
-    if bar_trd is None :
-        bar_trd=np.genfromtxt(fntd, delimiter=',',usecols=[0,1,2,3,4,5,6,7]) #,dtype=[('utc','i8'),('open','<f8'),('high','<f8'),('low','<f8'),('close','<f8'),('vol','i8'),('cnt','i8'),('wap','<f8')])
+    if bar_trd is None or len(bar_trd) == 0 :
+        has_trd = l1.get_file_size(fntd)>100 or l1.get_file_size(fntd+'.gz')>100
+        if has_trd :
+            bar_trd = get_trd(fntd)
+        if is_fx or not has_trd or len(bar_trd) < 1:
+            print 'Getting Quote Only!'
+            b0 = bar_by_file_ib_qtonly(fn)
+            if len(b0) > 0 :
+                ix0, ix1 = clip_idx(b0[:, 0], symbol, start_day, end_day)
+                return [], [], b0[ix0:ix1, :]
+            return [], [], b0
+    if bar_qt is None or len(bar_qt) == 0 :
+        bar_qt = get_qt(fnqt)
 
     # use quote as ref
     nqt =  bar_qt.shape[0]
@@ -456,6 +462,7 @@ def bar_by_file_ib(fn, symbol, start_day='19980101', end_day='20990101', bar_qt=
     ts[ix0,6]=0
     ts[ix0,7]=bar_qt[ix0,4].copy()
 
+    import pandas as pd
     vwap=ts[:,7].copy()
     vol=ts[:,5].copy()
     vb=vol.copy()
@@ -484,13 +491,7 @@ def bar_by_file_ib(fn, symbol, start_day='19980101', end_day='20990101', bar_qt=
 
     vb=np.clip((vwap-(mid-spd/2))/spd,0,1)*vol
     vs=vol-vb
-
     bar=np.vstack((bar_qt[:,0],utc_ltt,bar_qt[:,1:5].T,vwap,vol,vb,vs)).T
-    if gz : 
-        for f in [fnqt, fntd] :
-            print 'gzip ' + f
-            os.system('gzip ' + f)
-
     ix0, ix1 = clip_idx(bar[:,0], symbol, start_day, end_day)
     return bar_qt, bar_trd, bar[ix0:ix1, :]
 
@@ -655,11 +656,21 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
         if len(missday) > 0 :
             print 'getting the missing days ', missday
             from ibbar import get_missing_day
-            fn = get_missing_day(symbol, missday, bar_sec, is_front_future, reuse_exist_file=True)
-            for f in fn :
+            fn = []
+            mdays = []
+            for md in missday :
+                fn0 = get_missing_day(symbol, [md], bar_sec, is_front_future, reuse_exist_file=True)
+                if len(fn0) > 0 :
+                    fn += fn0
+                    mdays.append(md)
+                else :
+                    print 'nothing on missing day: ', md
+
+            for f, d in zip(fn, mdays) :
                 try :
-                    _,_,b=bar_by_file_ib(f,symbol)
+                    _,_,b=bar_by_file_ib(f,symbol, start_day=d, end_day=d)
                     if len(b) > 0 :
+                        print 'got ', len(b), ' bars from ', f, ' on missing day', d
                         ba, td, col, bad_days, lastpx0 = write_daily_bar(symbol, b,bar_sec=bar_sec, is_front=is_front_future, get_missing=False)
                         tda+=td
                         tda_bad+=bad_days
@@ -669,7 +680,9 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
                                     dbar_repo.remove_day(td0,match_barsec=bar_sec)
                             dbar_repo.update(ba, td, col, bar_sec)
                         else :
-                            print 'nothing got for missing days ', missday
+                            print 'no trading day is found from ', f, ' on missing day ', d
+                    else :
+                        print 'nothing got for missing day: ', d
                 except :
                     traceback.print_exc()
                     print 'problem processing file ', f
@@ -680,7 +693,7 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
     return tda, tda_bad
 
 
-def ingest_all_symb(sday, eday, repo_path=None, get_missing=True, sym_list = None, future_inclusion=['front','back'], sym_list_exclude=[], overwrite_dbar=True, EarliestMissingDay='20180401') :
+def ingest_all_symb(sday, eday, repo_path=None, get_missing=True, sym_list = None, future_inclusion=['front','back'], sym_list_exclude=[], overwrite_dbar=True, EarliestMissingDay='20180201') :
     """
     This will go to IB historical data, usually in /cygdrive/e/ib/kisco,
     read all the symbols defined by sym_list and update the repo at repo_path,

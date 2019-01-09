@@ -246,16 +246,6 @@ ICEFutures = ven_sym_map['ICE']
 future_venues=['NYM','CME','CBT','EUX','ICE','NYBOT']
 fx_venues=['FX']
 
-#HoursDefines={'CMEAgriHours':[-4, 15], \
-#              'CMELiveStockHours':[9, 15], \
-#              'ICEHours':[-4, 18], \
-#              'CocoaHours':[4,14], \
-#              'CottonHours':[-3, 15], \
-#              'SugarHours':[3,13], \
-#              'USStockHours':[9,16], \
-#              'EUXHours':[2,16], \
-#              }
-
 start_stop_hours_symbol={\
         'CMEAgriHours':      {'sym':['ZC','ZW','ZS','ZM','ZL'], 'hour':[-4, 15]},\
         'CMELiveStockHours': {'sym':['HE', 'LE'],               'hour':[9, 15]},\
