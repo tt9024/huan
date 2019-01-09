@@ -579,6 +579,10 @@ def get_barsec_from_file(f) :
                 pass
     raise ValueError('no barsec detected in file %s'%(f))
 
+def get_days_from_file(f) :
+    s0 = f.split('_')
+    return s0[1], s0[2]
+
 def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_future=True, get_missing=True, barsec_from_file=True, overwrite_dbar=False, EarliestMissingDay='19980101') :
     """
     generate IB dily bars from sday to eday.
@@ -611,7 +615,8 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
                 print 'Set barsec to ', bar_sec, ' from ', default_barsec
 
         try :
-            _,_,b=bar_by_file_ib(f,symbol, start_day=sday, end_day=eday)
+            d0, d1 = get_days_from_file(f)
+            _,_,b=bar_by_file_ib(f,symbol, start_day=max(sday,d0), end_day=min(eday,d1))
         except Exception as e :
             print e
             b = []
