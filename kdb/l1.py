@@ -116,6 +116,37 @@ class TradingDayIterator :
     def cur_utc() :
         return TradingDayIterator.local_dt_to_utc(datetime.datetime.now(),True)
 
+    @staticmethod
+    def ymd_to_utc(ymd, ymd_tz, h_ofst=0,m_ofst=0,s_ofst=0, machine_tz = 'US/Eastern') :
+        """
+        A more general method for local_ymd_to_utc(), where both ymd_tz is the machine_tz.
+        It returns the utc of ymd specified in ymd_tz.  The machine_tz is to specify 
+        the time zone of the running system, i.e. the system time zone of the machine. 
+        possible ymd_tz could be:
+        EUREX: Europe/Berlin
+        CME  : US/Central
+        IPE  : Europe/London
+        """
+        ymdhms = '%s%02d%02d%02d'%(ymd, h_ofst, m_ofst,s_ofst)
+        dt=datetime.datetime.strptime(ymdhms,'%Y%m%d%H%M%S') # this should adjust DST
+        return TradingDayIterator.dt_to_utc(dt, ymd_tz, machine_tz=machine_tz)
+
+    @staticmethod
+    def dt_to_utc(dt, dt_tz, micro_fraction=False, machine_tz = 'US/Eastern') :
+        """
+        EUREX: Europe/Berlin
+        CME  : US/Central
+        IPE  : Europe/London
+        """
+        import pytz
+        dtz = pytz.timezone(dt_tz)
+        ttz = pytz.timezone(machine_tz)
+        ddt = dtz.localize(dt, is_dst=None)
+        tdt = ttz.localize(dt, is_dst=None)
+        df = (ddt-tdt).total_seconds()  # sign significant
+        lutc=TradingDayIterator.local_dt_to_utc(dt, micro_fraction=micro_fraction)
+        return lutc+df
+
 def trd_day(utc=None) :
     """
     get trade day of utc. If none, gets the current day

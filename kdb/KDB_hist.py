@@ -9,15 +9,16 @@ import os
 
 def bar_by_file(fn, symbol) :
     if symbol in kdb_future_symbols :
-        return bar_by_file_future(fn, skip_header=5)
+        return bar_by_file_future(fn, skip_header=5, csv_tz = future_csv_tz[symbol])
     elif symbol in kdb_etf_symbols :
+        # all New York Time
         return bar_by_file_etf(fn, skip_header=5)
     elif symbol in kdb_fx_symbols :
-        return bar_by_file_fx(fn, skip_header=5)
+        return bar_by_file_fx(fn, skip_header=5, csv_tz = 'Europe/London')
 
     raise ValueError('unknown symbol ' + symbol)
 
-def bar_by_file_fx(fn, skip_header) :
+def bar_by_file_fx(fn, skip_header, csv_tz) :
     """
     date,ric,timeStart,closeBid,closeAsk,avgSpread,cntTick
     2014.02.06,AUD=,00:00:00.000,0.8926,0.8927,2.61415,3
@@ -31,6 +32,9 @@ def bar_by_file_fx(fn, skip_header) :
     
     Note 2:
     no open/hi/low prices, all equals to close price
+
+    Note 3:
+    the time stamp are taken as London time (Reuters)
     """
     bar_raw=np.genfromtxt(fn,delimiter=',',usecols=[0,2,3,4], skip_header=skip_header,dtype=[('day','|S12'),('bar_start','|S14'),('closebid','<f8'),('closeask', '<f8')])
     bar=[]
@@ -38,7 +42,7 @@ def bar_by_file_fx(fn, skip_header) :
     utc_sod=float(l1.TradingDayIterator.local_dt_to_utc(dt))
     for b in bar_raw :
         dt=datetime.datetime.strptime(b['day']+'.'+b['bar_start'].split('.')[0],'%Y.%m.%d.%H:%M:%S')
-        utc=float(l1.TradingDayIterator.local_dt_to_utc(dt))
+        utc=float(l1.TradingDayIterator.dt_to_utc(dt, dt_tz=csv_tz))
         utc_lt = utc_sod-1
 
         px = (b['closebid'] + b['closeask'])/2
@@ -52,7 +56,7 @@ def bar_by_file_fx(fn, skip_header) :
     ix=np.argsort(bar[:, 0])
     return bar[ix, :]
 
-def bar_by_file_future(fn, skip_header) :
+def bar_by_file_future(fn, skip_header, csv_tz) :
     """
     volume can include block/manual trades that are not included in bvol and svol. 
     The side of those trades are lost
@@ -66,9 +70,9 @@ def bar_by_file_future(fn, skip_header) :
     bar=[]
     for b in bar_raw :
         dt=datetime.datetime.strptime(b['day']+'.'+b['bar_start'].split('.')[0],'%Y.%m.%d.%H:%M:%S')
-        utc=float(l1.TradingDayIterator.local_dt_to_utc(dt))
+        utc=float(l1.TradingDayIterator.dt_to_utc(dt, dt_tz=csv_tz))
         dt_lt=datetime.datetime.strptime(b['day']+'.'+b['last_trade'].split('.')[0],'%Y.%m.%d.%H:%M:%S')
-        utc_lt=float(l1.TradingDayIterator.local_dt_to_utc(dt))+float(b['last_trade'].split('.')[1])/1000.0
+        utc_lt=float(l1.TradingDayIterator.dt_to_utc(dt, dt_tz=csv_tz))+float(b['last_trade'].split('.')[1])/1000.0
 
         bar0=[utc, utc_lt, b['open'],b['high'],b['low'],b['close'],b['vwap'],b['volume'],b['bvol'],b['svol']]
         bar.append(bar0)
@@ -311,6 +315,46 @@ def write_daily_bar(symbol,bar,bar_sec=5,old_cl_repo=None) :
 kdb_future_symbols = ['6A',  '6B',  '6C',  '6E',  '6J',  '6M',  '6N',  'CL',  'ES', 'FDX',  'FGBL',  'FGBM',  'FGBS',  'FGBX',  'ZF',  'GC',  'HG',  'HO', 'LCO',  'NG',  'RB',  'SI',  'STXE',  'ZN',  'ZB',  'ZC']
 kdb_fx_symbols = ['AUD.USD',  'AUD.JPY',  'AUD.NZD',  'USD.CAD',  'USD.CNH',  'EUR.USD',  'EUR.AUD',  'EUR.GBP',  'EUR.JPY',  'EUR.NOK',  'EUR.SEK',  'GBP.USD',  'USD.JPY',  'USD.MXN',  'NOK.SEK',  'NZD.USD',  'USD.SEK',  'USD.TRY',  'XAU.USD',  'USD.ZAR']
 kdb_etf_symbols = l1.ven_sym_map['ETF']
+
+future_csv_tz = {
+        # downloaded csv in local time format
+        'CL'  :'US/Eastern',\
+        'GC'  :'US/Eastern',\
+        'HO'  :'US/Eastern',\
+        'RB'  :'US/Eastern',\
+        'SI'  :'US/Eastern',\
+        'HG'  :'US/Eastern',\
+        'NG'  :'US/Eastern',\
+        #
+        # downloaded csv in Eurex time
+        # FDX has longer trading hours
+        #
+        'FDX' :'Europe/Berlin',\
+        'STXE':'Europe/Berlin',\
+        'FGBX':'Europe/Berlin',\
+        'FGBL':'Europe/Berlin',\
+        'FGBM':'Europe/Berlin',\
+        'FGBS':'Europe/Berlin',\
+        #
+        # downloaded csv in IPE time
+        #
+        'LCO' :'Europe/London',\
+        #
+        # downloaded csv in CME time
+        #
+        '6A'  :'US/Central',\
+        '6B'  :'US/Central',\
+        '6C'  :'US/Central',\
+        '6E'  :'US/Central',\
+        '6J'  :'US/Central',\
+        '6M'  :'US/Central',\
+        '6N'  :'US/Central',\
+        'ES'  :'US/Central',\
+        'ZF'  :'US/Central',\
+        'ZN'  :'US/Central',\
+        'ZB'  :'US/Central',\
+        'ZC'  :'US/Central',\
+        }
 
 def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path='.', old_cl_repo = None) :
     year =  str(year)  # expects a string

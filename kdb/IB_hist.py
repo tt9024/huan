@@ -61,12 +61,12 @@ def write_daily_bar(symbol, bar, bar_sec=5, is_front=True, last_close_px=None, g
     if last_close_px is None :
         x=np.searchsorted(bar[1:,0], float(utc_s)-1e-6)
 
-        # only take the last price within 1 minutes of utc_s
-        if x+1 >= bar.shape[0] or bar[x+1, 0] - utc_s > 60 :
+        # only take the last price within 5 minutes of utc_s
+        if x+1 >= bar.shape[0] or bar[x+1, 0] - utc_s > 300 :
             if x+1>=bar.shape[0] :
                 print 'no bars found after the start utc of ', day_start
             else :
-                print 'start up utc (%d) 60 minutes later than start utc (%d) on %s'%(bar[x+1,0], utc_s, day_start)
+                print 'start up utc (%d) 5 minutes later than start utc (%d) on %s'%(bar[x+1,0], utc_s, day_start)
                 print 'initializing start up last_close_px deferred'
         else :
             if x == 0 :
@@ -75,6 +75,8 @@ def write_daily_bar(symbol, bar, bar_sec=5, is_front=True, last_close_px=None, g
             else :
                 last_close_px=bar[x,5]
                 print 'last close price set to previous close at ', datetime.datetime.fromtimestamp(bar[x,0]), ' px: ', last_close_px
+
+        print 'GOT last close px ', last_close_px
     else :
         print 'GIVEN last close price ', last_close_px
 
@@ -118,10 +120,13 @@ def write_daily_bar(symbol, bar, bar_sec=5, is_front=True, last_close_px=None, g
         # a good threshold for missing/bad day
         bar_good = True
         if j-i<N*0.90 :
-            bar_good=False
-            print 'fewer bars for trading day %s: %d < %d * 0.9'%(day1, j-i,N)
+            if symbol in ['LE','HE'] :
+                bar_good = (j-i)<N*0.75
+            else :
+                bar_good=False
 
         if not bar_good:
+            print 'fewer bars for trading day %s: %d < %d * 0.9'%(day1, j-i,N)
             if day1 not in l1.bad_days and get_missing :
                 # recurse with the current last price and get the updated last price
                 print 'getting missing day %s'%(day1)
