@@ -141,8 +141,10 @@ class TradingDayIterator :
         import pytz
         dtz = pytz.timezone(dt_tz)
         ttz = pytz.timezone(machine_tz)
-        ddt = dtz.localize(dt, is_dst=None)
-        tdt = ttz.localize(dt, is_dst=None)
+        #ddt = dtz.localize(dt, is_dst=None)
+        #tdt = ttz.localize(dt, is_dst=None)
+        ddt = dtz.localize(dt)
+        tdt = ttz.localize(dt)
         df = (ddt-tdt).total_seconds()  # sign significant
         lutc=TradingDayIterator.local_dt_to_utc(dt, micro_fraction=micro_fraction)
         return lutc+df

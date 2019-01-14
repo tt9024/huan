@@ -39,7 +39,7 @@ def bar_by_file_fx(fn, skip_header, csv_tz) :
     bar_raw=np.genfromtxt(fn,delimiter=',',usecols=[0,2,3,4], skip_header=skip_header,dtype=[('day','|S12'),('bar_start','|S14'),('closebid','<f8'),('closeask', '<f8')])
     bar=[]
     dt=datetime.datetime.strptime(bar_raw[0]['day']+'.'+bar_raw[0]['bar_start'].split('.')[0],'%Y.%m.%d.%H:%M:%S')
-    utc_sod=float(l1.TradingDayIterator.local_dt_to_utc(dt))
+    utc_sod=float(l1.TradingDayIterator.dt_to_utc(dt, dt_tz=csv_tz))
     for b in bar_raw :
         dt=datetime.datetime.strptime(b['day']+'.'+b['bar_start'].split('.')[0],'%Y.%m.%d.%H:%M:%S')
         utc=float(l1.TradingDayIterator.dt_to_utc(dt, dt_tz=csv_tz))
