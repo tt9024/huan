@@ -444,7 +444,7 @@ def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path
         td_arr += td
         col_arr += col
         try :
-            os.system('gzip ' + f)
+            os.system('gzip -f ' + f)
         except :
             pass
 
@@ -452,7 +452,6 @@ def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path
 
 
 def gen_bar(symbol, year_s=1998, year_e=2018, check_only=False, repo=None, kdb_hist_path = '/cygdrive/e/kdb', old_cl_repo = None, bar_sec=5) :
-    ba=[]
     td=[]
     col=[]
     years=np.arange(year_s, year_e+1)
@@ -460,7 +459,8 @@ def gen_bar(symbol, year_s=1998, year_e=2018, check_only=False, repo=None, kdb_h
         try :
             barlr, td_arr, col_arr=gen_bar0(symbol,str(y),check_only=check_only, kdb_hist_path = kdb_hist_path, bar_sec=bar_sec, old_cl_repo=old_cl_repo)
             if len(barlr) > 0 :
-                ba+=barlr
+                if repo is not None :
+                    repo.update(barlr, td_arr, col_arr, bar_sec)
                 td+=td_arr
                 col+=col_arr
         except :
@@ -474,9 +474,6 @@ def gen_bar(symbol, year_s=1998, year_e=2018, check_only=False, repo=None, kdb_h
         print 'nothing found for ', symbol, ' from ', year_s, ' to ', year_e
         return [], [], [], []
 
-    if repo is not None :
-        repo.update(ba, td, col, bar_sec)
-
     # generate a bad day list 
     sday = td[0]
     eday = td[-1]
@@ -489,7 +486,7 @@ def gen_bar(symbol, year_s=1998, year_e=2018, check_only=False, repo=None, kdb_h
         diter.next()
         day = diter.yyyymmdd()
 
-    return ba, td, col, bday
+    return td, col, bday
 
 def fix_days_from_old_cl_repo(td, sday, eday, old_cl_repo) :
     """
@@ -542,7 +539,7 @@ def ingest_all_kdb_repo(kdb_path='/cygdrive/c/zfu/data/kdb', repo_path='/cygdriv
                 print 'creating repo for ', sym, ' repo_path ', repo_path
                 db = repo.RepoDailyBar(sym, repo_path=repo_path, create=True)
         try :
-            _, td, _, bd = gen_bar(sym, year_s, year_e, repo=db, kdb_hist_path=kdb_path)
+            td, _, bd = gen_bar(sym, year_s, year_e, repo=db, kdb_hist_path=kdb_path)
         except :
             import traceback
             traceback.print_exc()
