@@ -257,6 +257,32 @@ def write_daily_bar(symbol,bar,bar_sec=5,old_cl_repo=None) :
             vlm=bar0[:,7]
             vb=bar0[:,8]
             vs=np.abs(bar0[:,9])
+            
+            # work out vlm mistakes
+            while True:
+                bdix = np.nonzero(vlm-vb-vs)[0]
+                vbsix = np.nonzero(vb[bdix]+vs[bdix]==0)[0]
+                bdix = np.delete(bdix, vbsix)
+                if len(bdix) > 0 :
+                    print len(bdix), ' ticks have volume mismatch!'
+                    vbix = np.nonzero(vb[bdix]==0)[0]
+                    if len(vbix) > 0 :
+                        print len(vbix), ' buy zero ticks'
+                        vbix0 = bdix[vbix]
+                        vb[vbix0] = vlm[vbix0]-vs[vbix0]
+                    vsix = np.nonzero(vs[bdix]==0)[0]
+                    if len(vsix) > 0 :
+                        print len(vsix), ' sell zero ticks'
+                        vsix0 = bdix[vsix]
+                        vs[vsix0] = vlm[vsix0]-vb[vsix0]
+
+                    if len(vbix) + len(vsix) == 0 :
+                        print ' no zero buy/sell ticks to adjust!'
+                        break
+                else :
+                    print ' vbs matches with vlm!'
+                    break
+
             vbs=vb-vs
 
             for v0, vn in zip([lr,lr_hi,lr_lo,lr_vw,vlm,vbs], ['lr','lr_hi','lr_lo','lr_vw','vlm','vbs']) :
