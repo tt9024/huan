@@ -247,12 +247,14 @@ class RepoDailyBar :
 
         try :
             self.idx = np.load(self.path+'/idx.npz')['idx'].item()
-        except :
+        except Exception as e:
             if create :
                 os.system('mkdir -p '+self.path)
                 self.idx=RepoDailyBar.make_bootstrap_idx(symbol)
                 np.savez_compressed(self.path+'/idx.npz',idx=self.idx)
             else :
+                import traceback
+                traceback.print_exc()
                 raise ValueError('idx.npz not found from ' + self.path)
 
         self.venue = self.idx['global']['venue']
