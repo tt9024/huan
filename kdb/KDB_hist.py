@@ -84,6 +84,41 @@ def bar_by_file_future(fn, skip_header, csv_tz) :
     ix=np.argsort(bar[:, 0])
     return bar[ix, :]
 
+def bar_by_file_future_trd(fn) :
+    """
+    date,ric,time,gmt_offset,price,volume,tic_dir
+    2009.10.28,CLZ9,00:00:00.224,-4,,58,
+    2009.10.28,CLZ9,00:00:14.890,-4,79.4,1,^
+    2009.10.28,CLZ9,00:00:14.890,-4,79.39,1,v
+    
+    where gmt_offset is w.r.t ny local time.
+    price can be none, a implied trade or block trade
+    tic_dir: ^ buy v sell
+
+    Return:
+    [utc, px, bsvol]
+    """
+
+    bar_raw=np.genfromtxt(fn,delimiter=',',usecols=[0,2,3,4,5,6],skip_header=5,dtype=[('day','|S12'),('time','|S16'),('gmtoff','i8'),('px','<f8'),('sz','i8'),('dir','|S2')])
+    ts=[]
+    for i, b in enumerate(bar_raw) :
+        if b['dir'] == '' :
+            continue
+        dt = datetime.datetime.strftime(b['day'] + ' ' +b['time'], '%Y.%m.%d %H:%M:%S.%f')
+        gmtoff=b['gmtoff']
+        dd = datetime.timedelta(0, abs(mgtoff)*3600)
+        utc = l1.TradingDayIterator.local_dt_to_utc(dt + np.sign(gmtoff)*dd)
+        if b['dir']=='v' :
+            bs = -1
+        elif b['dir'] == '^' :
+            bs = 1
+        else :
+            raise ValueError('%s line %d got unknown direction in trd file %s'%(fn, i, b['dir']))
+        ts.append([utc, b['px'], b['sz']*bs])
+
+    return np.array(ts)
+
+
 def bar_by_file_etf(fn, skip_header=5) :
     """
     date(0),ric,timeStart(2),exchange_id,country_code,mic,lastTradeTickTime(6),open(7),high,low,close,avgPrice,vwap(12),minSize,maxSize,avgSize,avgLogSize,medianSize,volume(18),dolvol,cntChangePrice,cntTrade,cntUpticks,cntDownticks,sigma,buyvol(24),sellvol(25),buydolvol,selldolvol,cntBuy,cntSell,sideSigma,priceImpr,maxPriceImpr,dolimb,midvol,gmt_offset,lastQuoteTickTime,openBid(37),openAsk,highBid,highAsk,lowBid,lowAsk,closeBid,closeAsk,avgBid,avgAsk,minBidSize,minAskSize,maxBidSize,maxAskSize,avgBidSize,avgAskSize,avgLogBidSize,avgLogAskSize,avgSpread,cntChangeBid,cntChangeAsk,cntTick
@@ -141,6 +176,18 @@ def bar_by_file_etf(fn, skip_header=5) :
     return bar[ix, :]
 
 def write_daily_bar(symbol,bar,bar_sec=5,old_cl_repo=None) :
+    """
+    input format:
+         utc, utc_lt, open, high, low, close, vwap, vol, bvol, svol
+         Where : 
+             utc is the start of the bar
+
+    output format: 
+         bt,lr,vl,vbs,lrhl,vwap,ltt,lpx
+         Where :
+             bt is the end of the bar time, as lr is observed
+
+    """
     import pandas as pd
     start_hour, end_hour = l1.get_start_end_hour(symbol)
     TRADING_HOURS=end_hour-start_hour
@@ -259,6 +306,8 @@ def write_daily_bar(symbol,bar,bar_sec=5,old_cl_repo=None) :
             vs=np.abs(bar0[:,9])
             
             # work out vlm mistakes
+            # use the daily trade to correct this
+            """
             while True:
                 bdix = np.nonzero(vlm-vb-vs)[0]
                 vbsix = np.nonzero(vb[bdix]+vs[bdix]==0)[0]
@@ -282,6 +331,7 @@ def write_daily_bar(symbol,bar,bar_sec=5,old_cl_repo=None) :
                 else :
                     print ' vbs matches with vlm!'
                     break
+            """
 
             vbs=vb-vs
 
