@@ -482,6 +482,7 @@ class RepoDailyBar :
         read a day from repo, files are stored in the day directory
         each day's index is stored as a key in the repo's symbol 
         index
+        return bar, col, bs
         Note: The start/stop time may be different from time to time.
               Especially KDB and IB hist.
               self.sh and self.eh initialized from l1.start_stop_hour()

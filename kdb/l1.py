@@ -420,6 +420,13 @@ def FC_next(symbol, yyyymmdd) :
         fc_next = FC(symbol, ti.yyyymmdd())
     return fc_next, ti.yyyymmdd()
 
+def next_contract(symbol, yyyymmdd, contract) :
+    """
+    why do I need this stupid function?
+    """
+    pass
+
+
 def CList(symbol, yyyymmdd, days_overlap = 5) :
     ti=TradingDayIterator(yyyymmdd)
     ti.next_n_trade_day(days_overlap)

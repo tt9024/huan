@@ -84,6 +84,82 @@ def bar_by_file_future(fn, skip_header, csv_tz) :
     ix=np.argsort(bar[:, 0])
     return bar[ix, :]
 
+def bar_by_file_future_trd_day(symbol, day1, day2, kdb_path, fc=None, nc=False) :
+    """
+    kdb_path is the path to the kdb files, usually the trd file is kdb_path/symbol/trd/
+    The fc is the expected front contract, given by the kdb bar file.  In this case
+    the fc doesn't change for the period of day1 to day2, inclusive. 
+    None to get from l1.FC(), in this case FC changes with the days.
+    nc: if True, then getting the next contract of the fc 
+
+    return: tsarr, fcarr, darr
+       tsarr is an array of np.array([utc, trd_px, signed_trd_vol])
+       fcarr is an array of front contract in tsarr
+       darr is an array of day on the trd file names.  The day 
+            is NOT a trading day, it's a calendar day, i.e. from 0 to 23:59:59
+            of that day
+    """
+    ts = []
+    fcarr=[]
+    darr = []
+
+    it = l1.TradingDayIterator(day1)
+    while day1 <= day2 :
+        if nc:
+            bfn_contract = l1.FC_next(symbol, day1)
+        else :
+            fc0 = l1.FC(symbol, day1)
+            bfn_contract = fc
+            if fc is None :
+                bfn_contract = fc0
+            else :
+                if fc0 != bfn_contract :
+                    print 'WARNING!  bar file contract is not front contract on ', day1, l1.FC(symbol, day1), bfn_contract
+
+        fn0 = kdb_path + '/'+symbol+'/*'+day1+'*'
+        fn = glob.glob(fn0)
+        trdfn = None
+        if len(fn) == 1 :
+            if not nc :
+                # just take it
+                trdfn = fn[0]
+                if bfn_contract not in trdfn :
+                    print 'WARNING! got only 1 file (%s) with fc(%s)'%(trdfn, bfn_contract)
+            else :
+                # nc not found
+                if bfn_contract in fn[0] :
+                    trdfn = fn[0]
+                else :
+                    print 'nc not found: ', day1, ' con: ', bfn_contract, ' only file: ', fn[0]
+
+        elif len(fn) > 1:
+            szarr=[]
+            for f0 in fn :
+                if bfn_contract in f0 :
+                    trdfn = f0 
+                    break
+                szarr.append(os.stat(f0).st_size)
+
+            if trdfn is None :
+                ix = np.argsort(szarr)
+                if not nc :
+                    # tka the larger one
+                    trdfn = fn[ix[-1]]
+                else :
+                    trdfn = fn[ix[0]]
+
+        if trdfn is not None :
+            ts.append(bar_by_file_future_trd(trdfn))
+            fcarr.append(trdfn.split('_')[0])
+            darr.append(day1)
+
+        else :
+            print 'no trd file found on ', day1, ' symbol ', symbol
+
+        it.next()
+        day1=it.yyyymmdd()
+    return ts, fcarr, darr
+
 def bar_by_file_future_trd(fn) :
     """
     date,ric,time,gmt_offset,price,volume,tic_dir
@@ -98,16 +174,19 @@ def bar_by_file_future_trd(fn) :
     Return:
     [utc, px, bsvol]
     """
-
     bar_raw=np.genfromtxt(fn,delimiter=',',usecols=[0,2,3,4,5,6],skip_header=5,dtype=[('day','|S12'),('time','|S16'),('gmtoff','i8'),('px','<f8'),('sz','i8'),('dir','|S2')])
     ts=[]
     for i, b in enumerate(bar_raw) :
         if b['dir'] == '' :
             continue
-        dt = datetime.datetime.strftime(b['day'] + ' ' +b['time'], '%Y.%m.%d %H:%M:%S.%f')
+        dt = datetime.datetime.strptime(b['day'] + ' ' +b['time'], '%Y.%m.%d %H:%M:%S.%f')
+        utc = l1.TradingDayIterator.local_dt_to_utc(dt, micro_fraction=True)
+        """
+        #dt = datetime.datetime.strftime('%Y.%.%d %H:%M:%S.%f', b['day'] + ' ' +b['time'])
         gmtoff=b['gmtoff']
-        dd = datetime.timedelta(0, abs(mgtoff)*3600)
+        dd = datetime.timedelta(0, abs(gmtoff)*3600)
         utc = l1.TradingDayIterator.local_dt_to_utc(dt + np.sign(gmtoff)*dd)
+        """
         if b['dir']=='v' :
             bs = -1
         elif b['dir'] == '^' :
@@ -116,8 +195,15 @@ def bar_by_file_future_trd(fn) :
             raise ValueError('%s line %d got unknown direction in trd file %s'%(fn, i, b['dir']))
         ts.append([utc, b['px'], b['sz']*bs])
 
-    return np.array(ts)
+    # merge trades with same milli, px and direction
+    ts = np.array(ts)
 
+    ux = ts[:,0]*np.sign(ts[:,2])
+    sz=np.cumsum(ts[:,2])
+    ix = np.r_[np.nonzero(np.abs(ux[1:]-ux[:-1]) > 1e-13)[0], len(ux)-1]
+    ts=ts[ix, :2]
+    ts=np.vstack((ts.T, sz[ix]-np.r_[0, sz[ix[:-1]]])).T
+    return ts
 
 def bar_by_file_etf(fn, skip_header=5) :
     """
@@ -129,6 +215,7 @@ def bar_by_file_etf(fn, skip_header=5) :
 
     Note 1:
     All fields before gmt (-5) is empty if there were no trade in this bar period
+    k
     NOte 2: 
     volume may be larger than bvol + svol, same as Future
 
@@ -174,6 +261,141 @@ def bar_by_file_etf(fn, skip_header=5) :
     bar=bar[ix, :]
     ix=np.argsort(bar[:, 0])
     return bar[ix, :]
+
+def gen_bar_trd(symbol, sday, eday, dbar, kdb_path='./kdb', bar_sec=1, nc=False) :
+    """
+    getting from the ts [utc, px, signed_vol]
+    output format bt, lr, vl, vbs, lrhl, vwap, ltt, lpx
+
+    if dbar is not None, update dbar, otherwise 
+    return :
+        bar_arr, days, col_arr
+
+    The problems:
+    1. deal with missing days
+       still need the bar data to fill in those!
+       1 trd file will cause the missing of two days. Only
+       way is to use 5S bars to fill, but how do you
+       down sample them?
+       Just ditch the two days 
+
+       How many missing days do I have by the way?
+    2. deal with rolls
+       if the contract goes to a different contract
+       over, then just apply a constant offset on
+       the price. 
+    """
+
+    start_hour, end_hour = l1.get_start_end_hour(symbol)
+    tds = 1
+    it = l1.TradingDayIterator(sday)
+    pday = it.yyyymmdd()
+    tday = it.yyyymmdd()
+    if start_hour < 0 :
+        tds = 2
+        it.prev()
+        pday=it.yyyymmdd()
+        it.next()
+        start_hour = start_hour % 24
+
+    da = [] ; ta = [] ;  fa = []
+    lastpx=0
+    prev_con=''
+    while tday <= eday :
+        # get for trading day
+        if len(da) == 2 :
+            day0 = tday
+            da=[da[-1]] ; ta=[ta[-1]] ; fa=[fa[-1]]
+            tds0=1
+        else :
+            # either initial or previously broken 2-day or 1 day 
+            day0 = pday
+            tds0=tds
+            da=[] ; ta=[] ; fa=[]
+
+        tsarr, fcarr, darr = bar_by_file_future_trd_day(symbol, day0, tday, kdb_path=kdb_path, nc=nc)
+        if len(darr) != tds0 :
+            print 'error getting trading day ', tday, ' found only ', darr, fcarr
+            da=[] ; fa=[] ; fa=[]
+            lastpx=0
+            prev_con=''
+        else :
+            # this is the good case
+            da+=darr ; fa+=fcarr ; ta+=tsarr
+            # figure out the utc
+            sutc = it.local_ymd_to_utc(pday,h_ofst=start_hour)
+            eutc = it.local_ymd_to_utc(tday,h_ofst=end_hour)
+            ix0=np.searchsorted(ta[0][:,0],sutc)
+            ix1=np.searchsorted(ta[-1][:,0],eutc+1e-6)
+            len0 = len(ta[0][:,0])
+            len1 = len(ta[-1][:,0])
+            if lastpx == 0 :
+                lastpx=ta[0][max(ix0-1,0),1]
+
+            if ix0 >= len0 :
+                # first half day?
+                print 'starting ix as the last index of first of ', da
+                ix0 = len0-1
+            if ix1 == 0 :
+                # second half day?
+                print 'ending ix as the first index of second of ', da
+
+            # need to check rolls and set the lastpx
+            if tds == 2 :
+                if fa[0] != fa[1] 
+                    px_diff = ta[1][0,1]-ta[0][-1,1]
+                    ta[0][:,1]+=px_diff
+                    lastpx+=px_diff
+                bar = np.vstack((ta[0][ix0:,:], ta[1][:ix1,:]))
+            else :
+                if fa[0] != prev_con :
+                    lastpx=ta[0][0,1]
+                bar = np.array(ta[0][ix0:ix1,:])
+
+            # have everything, need to get to
+            # output format bt, lr, vl, vbs, lrhl, vwap, ltt, lpx
+            bt=np.arange(sutc+bar_sec,eutc+bar_sec,bar_sec)
+
+            tts=np.r_[sutc,bar[:,0]]
+            pts=np.r_[bar[0,1],bar[:,1]]
+            vts=np.r_[0,bar[:,2]]
+            pvts=np.abs(vts)*pts
+
+            pxix=np.clip(np.searchsorted(tts[1:],bt+1e-6),0,len(tts)-1)
+            lpx=pts[pxix]
+            lr = np.log(np.r_[lastpx,lpx])
+            lr=lr[1:]-lr[:-1]
+
+            # tricky way to get index right on volumes
+            btdc=np.r_[0,np.cumsum(vts)[pxix]]
+            vbs=btdc[1:]-btdc[:-1]
+            btdc=np.r_[0,np.cumsum(np.abs(vts))[pxix]]
+            vol=btdc[1:]-btdc[:-1]
+
+            # even tickier way to get vwap/ltt right
+            ixg=np.nonzero(vol)[0]
+            btdc=np.r_[0, np.cumsum(pvts)[pxix]]
+            vwap=lpx.copy()  #when there is no vol
+            vwap[ixg]=(btdc[1:]-btdc[:-1])[ixg]/vol[ixg]
+            ltt=np.zeros(len(bt))
+            ltt[ixg]=tts[pxix][ixg]
+            repo.fwd_bck_fill(ltt, v=0)
+
+            # give up, ignore the lrhl for trd bars
+            lrhl=np.zeros(len(bt))
+
+            b=np.vstack((bt,lr,vol,vbs,lrhl,vwap,ltt,lpx)).T
+            d=tday
+            c=repo.kdb_ib_col
+            dbar.remove_day(d)
+            dbar.update([b],[d],[c],bar_sec)
+            lastpx=lpx[-1]
+            prev_con=fa[-1]
+
+        pday=tday
+        it.next()
+        tday=it.yyyymmdd()
+
 
 def write_daily_bar(symbol,bar,bar_sec=5,old_cl_repo=None) :
     """
@@ -387,6 +609,7 @@ def write_daily_bar(symbol,bar,bar_sec=5,old_cl_repo=None) :
         day=day1
 
     return barr, trade_days, col_arr
+
 
 kdb_future_symbols = ['6A',  '6B',  '6C',  '6E',  '6J',  '6M',  '6N',  'CL',  'ES', 'FDX',  'FGBL',  'FGBM',  'FGBS',  'FGBX',  'ZF',  'GC',  'HG',  'HO', 'LCO',  'NG',  'RB',  'SI',  'STXE',  'ZN',  'ZB',  'ZC']
 kdb_fx_symbols = ['AUD.USD',  'AUD.JPY',  'AUD.NZD',  'USD.CAD',  'USD.CNH',  'EUR.USD',  'EUR.AUD',  'EUR.GBP',  'EUR.JPY',  'EUR.NOK',  'EUR.SEK',  'GBP.USD',  'USD.JPY',  'USD.MXN',  'NOK.SEK',  'NZD.USD',  'USD.SEK',  'USD.TRY',  'XAU.USD',  'USD.ZAR']
