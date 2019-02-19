@@ -58,7 +58,7 @@ import datetime
 
 
 ###  Be very careful aboout the columns, 
-###  ONLY ADD, NEVER DELETE
+###  ONLY ADD, NEVER DELETE, NOR CHANGE EXISTING ORDER
 hist_col=['utc', 'lr', 'vol', 'vbs', 'lrhl', 'vwap', 'ltt', 'lpx']
 l1bar_col=['spd', 'bs', 'as', 'qbc', 'qac', 'tbc', 'tsc', 'ism1']
 all_col=hist_col+l1bar_col
@@ -607,7 +607,72 @@ class RepoDailyBar :
                 ca.append(np.array( [  0   ]*tb ))
         return np.array(ca).T
 
+    def _fake_scale(self,day,b,c,bs,tgt_cols,tgt_bs) :
+        """
+        scale the bs down towards tgt_bs, and jam
+        everything onto the last bar of the tgt_bs. 
+        For example, to sacle volume from 5S to 1S, 
+        assume the trade happens at last 1S bar, 
+        same for the price movements.  This at least
+        conserves information not look ahead, but
+        it does skew short term behavior.  This is needed
+        for KDB trade 1S bar patched with quote 5S bar
+        on Sunday nights and missing days. Should
+        really not do that in general
+
+        Procedure:
+        for columns with last snapshot: 
+            defer the changes to the last bar within original bar,
+            except the very first bar, the value is back-filled. 
+
+        snapshot (i.e. lpx)
+        utc 0  1  2  3  4  5  6  7  8  9  10  11
+        5S                 v1             v2
+        1S     v1 v1 v1 v1 v1 v1 v1 v1 v1 v2  v2 
+        
+        cumsum (i.e. lr, vbs)
+        utc 0  1  2  3  4  5  6  7  8  9  10  11
+        5S                 v1             v2
+        1S     v1 0  0  0  0  0  0  0  0  v2  0 
+
+        bix    0  1  2  3  4  5  6  7  8  9  10
+
+        """
+        assert(bs>tgt_bs)
+        assert(bs/tgt_bs*tgt_bs==bs)
+        utc0 = b[:, ci(c,utcc)]
+        utc1 = self._make_daily_utc(day, tgt_bs)
+        self._check_utc(utc0, utc1)
+        fct=bs/tgt_bs
+
+        # utc0 is larger bar, utc1 is smaller bar
+        ix=np.searchsorted(utc1,utc0)
+        nb=[]
+        for c0 in tgt_cols :
+            if c0 == utcc :
+                nb.append(utc1)
+                continue
+            assert c0 in c, 'column ' + col_name(c0) + ' not found in '+ str(col_name(c))
+            v0 = b[:, ci(c,c0)]
+            if c0 in [lttc, lpxc, vwapc] +  col_idx(['ism1','spd','bs','as']) :
+                # needs to get the latest snap
+                nb.append(np.r_[np.tile(v0[0],fct-1),np.tile(v0[:-1],(fct,1)).T.flatten(),v0[-1]])
+            elif c0 in [lrc, volc, vbsc, lrhlc] + col_idx(['qbc','qac','tbc','tsc']):
+                # needs to put it into the last small bar and fill others zero
+                v1=np.zeros(len(utc1))
+                v1[np.arange(2*fct-1,len(utc1),fct)]=v0[1:]
+                v1[0]=v0[0]
+                nb.append(v1.copy())
+            else :
+                raise ValueError('unknow col ' + str(c0))
+
+        return np.array(nb).T
+
     def _scale(self,day,b,c,bs, tgt_cols, tgt_bs) :
+        if tgt_bs < bs :
+            print 'scale into a smaller bar than original! ', bs, ' to ', tgt_bs
+            return self._fake_scale(day,b,c,bs,tgt_cols,tgt_bs)
+
         utc0 = b[:, ci(c,utcc)]
         utc1 = self._make_daily_utc(day, tgt_bs)
         self._check_utc(utc0, utc1)
@@ -678,7 +743,7 @@ def getdt(utcarr) :
         dt.append(datetime.datetime.fromtimestamp(utc))
     return dt
 
-def plot_repo(repo_path_arr, symbol_arr, sday, eday) :
+def plot_repo(repo_path_arr, symbol_arr, sday, eday, bsarr=None) :
     """
     For each symbol in symbol_arr :
         create a new figure
@@ -688,6 +753,8 @@ def plot_repo(repo_path_arr, symbol_arr, sday, eday) :
     The goal is to visually inspect any problem for the repo data
     """
     import pylab as pl
+    if bsarr is None :
+        bsarr = [300]*len(repo_path_arr)
     for sym in symbol_arr :
         tstr = '%s from %s to %s'%(sym, sday, eday)
         fig = pl.figure()
@@ -696,19 +763,23 @@ def plot_repo(repo_path_arr, symbol_arr, sday, eday) :
         ax2 = fig.add_subplot(3,1,2,sharex=ax1)
         ax3 = fig.add_subplot(3,1,3,sharex=ax1)
         ax1.grid() ; ax2.grid() ; ax3.grid()
-        for rp in repo_path_arr :
+        for rp, bs in zip(repo_path_arr, bsarr) :
             rpstr = rp.split('/')[-1]
             dbar = RepoDailyBar(sym, repo_path=rp)
-            bar5m = dbar.daily_bar(sday, 0, 300, end_day=eday, group_days=1); 
+            bar5m = dbar.daily_bar(sday, 0, bs, end_day=eday, group_days=1); 
             bar5m = np.vstack(bar5m)
             dt = getdt(bar5m[:, 0])
             lr = bar5m[:, 1]
+            vol = bar5m[:,2]
             vbs = bar5m[:, 3]
             lpx = bar5m[:, 4]
          
             ax1.plot(dt, lpx, label=rpstr)
             ax2.plot(dt, np.cumsum(lr), label=rpstr)
             ax3.plot(dt, np.cumsum(vbs), label=rpstr)
+            ax3.plot(dt, np.cumsum(vol), label=rpstr)
 
         pl.gcf().autofmt_xdate()
         pl.legend(loc='best')
+
+

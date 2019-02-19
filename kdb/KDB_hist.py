@@ -103,7 +103,7 @@ def bar_by_file_future_trd_day(symbol, day1, day2, kdb_path, fc=None, nc=False) 
     fcarr=[]
     darr = []
 
-    it = l1.TradingDayIterator(day1)
+    it = l1.TradingDayIterator(day1,adj_start=False)
     while day1 <= day2 :
         if nc:
             bfn_contract = l1.FC_next(symbol, day1)
@@ -116,7 +116,7 @@ def bar_by_file_future_trd_day(symbol, day1, day2, kdb_path, fc=None, nc=False) 
                 if fc0 != bfn_contract :
                     print 'WARNING!  bar file contract is not front contract on ', day1, l1.FC(symbol, day1), bfn_contract
 
-        fn0 = kdb_path + '/'+symbol+'/*'+day1+'*'
+        fn0 = kdb_path + '/'+symbol+'/trd/*'+day1+'*'
         fn = glob.glob(fn0)
         trdfn = None
         if len(fn) == 1 :
@@ -150,11 +150,11 @@ def bar_by_file_future_trd_day(symbol, day1, day2, kdb_path, fc=None, nc=False) 
 
         if trdfn is not None :
             ts.append(bar_by_file_future_trd(trdfn))
-            fcarr.append(trdfn.split('_')[0])
+            fcarr.append(trdfn.split('/')[-1].split('_')[0])
             darr.append(day1)
 
         else :
-            print 'no trd file found on ', day1, ' symbol ', symbol
+            print 'no trd file found on ', day1, ' symbol ', symbol, ' glob ', fn0
 
         it.next()
         day1=it.yyyymmdd()
@@ -262,14 +262,17 @@ def bar_by_file_etf(fn, skip_header=5) :
     ix=np.argsort(bar[:, 0])
     return bar[ix, :]
 
-def gen_bar_trd(symbol, sday, eday, dbar, kdb_path='./kdb', bar_sec=1, nc=False) :
+def gen_bar_trd(symbol, sday, eday, repo_trd_path, repo_bar_path, kdb_path='./kdb', bar_sec=1, nc=False) :
     """
     getting from the ts [utc, px, signed_vol]
     output format bt, lr, vl, vbs, lrhl, vwap, ltt, lpx
 
-    if dbar is not None, update dbar, otherwise 
-    return :
-        bar_arr, days, col_arr
+    repo_trd_path: repo to store the 1S trd bars
+    repo_bar_path: repo to read the 5S kdb bars. Needed for
+                   Sunday nights and missing days
+
+    return : None
+        update (remove first) dbar with bar_arr, days, col_arr
 
     The problems:
     1. deal with missing days
@@ -284,65 +287,140 @@ def gen_bar_trd(symbol, sday, eday, dbar, kdb_path='./kdb', bar_sec=1, nc=False)
        if the contract goes to a different contract
        over, then just apply a constant offset on
        the price. 
+
+    3. Biggest Problem: No Sunday market data. Have to 
+       use the 5 second to stict it. Distribute all
+       trades to the last second of the 5 second interval
+       and taking the overnight log-ret
     """
 
+    try :
+        dbar = repo.RepoDailyBar(symbol, repo_path=repo_trd_path)
+    except :
+        print 'repo_trd_path failed, trying to create'
+        dbar = repo.RepoDailyBar(symbol, repo_path=repo_trd_path, create=True)
+
+    try :
+        dbar5S = repo.RepoDailyBar(symbol, repo_path=repo_bar_path)
+    except :
+        print 'repo_bar_path failed, no ammending from 5S bar is possible!'
+        dbar5S = None
+
     start_hour, end_hour = l1.get_start_end_hour(symbol)
-    tds = 1
+    TRADING_HOURS=end_hour-start_hour
+    # sday has to be a trading day
     it = l1.TradingDayIterator(sday)
-    pday = it.yyyymmdd()
     tday = it.yyyymmdd()
+    if tday != sday :
+        raise ValueError('sday has to be a trading day! sday: '+sday + ' trd_day: ' + tday)
+
+    tds = 1
     if start_hour < 0 :
         tds = 2
-        it.prev()
-        pday=it.yyyymmdd()
-        it.next()
-        start_hour = start_hour % 24
-
     da = [] ; ta = [] ;  fa = []
     lastpx=0
     prev_con=''
     while tday <= eday :
+        eutc = it.local_ymd_to_utc(tday,h_ofst=end_hour)
+        sutc = eutc - (TRADING_HOURS)*3600
+        pday = datetime.datetime.fromtimestamp(sutc).strftime('%Y%m%d')
+
         # get for trading day
-        if len(da) == 2 :
+        if len(da) == 2 and da[1] == pday :
             day0 = tday
             da=[da[-1]] ; ta=[ta[-1]] ; fa=[fa[-1]]
-            tds0=1
         else :
             # either initial or previously broken 2-day or 1 day 
             day0 = pday
-            tds0=tds
             da=[] ; ta=[] ; fa=[]
 
-        tsarr, fcarr, darr = bar_by_file_future_trd_day(symbol, day0, tday, kdb_path=kdb_path, nc=nc)
-        if len(darr) != tds0 :
-            print 'error getting trading day ', tday, ' found only ', darr, fcarr
+        try :
+            tsarr, fcarr, darr = bar_by_file_future_trd_day(symbol, day0, tday, kdb_path=kdb_path, nc=nc)
+        except :
+            tsarr=[] ; fcarr=[]; darr=[]
+        da+=darr ; fa+=fcarr ; ta+=tsarr
+
+        Filled=False
+        # try to patch the missing days from 5S repo
+        if len(da) != tds :
+            if dbar5S is not None:
+                b_,c_,bs_=dbar5S.load_day(tday)
+                if len(b_) > 0 :
+                    if tds == 1 or len(da) == 0:
+                        # just put everything in from 5S to 1S
+                        print 'missing day', tday, ' filling from ', repo_bar_path, ' bs=',bs_
+                        if bs_ != bar_sec :
+                            print ' scaling to ', bar_sec
+                            b_ = dbar5S._scale(tday,b_,c_,bs_,c_,bar_sec)
+                        # simply write everything in and call it done
+                        dbar.remove_day(tday)
+                        dbar.update([b_],[tday],[c_],bar_sec)
+                        # no idea of prev_con
+                        prev_con=''
+                        lastpx=0
+                        Filled=True
+                    else : 
+                        # take out the bar and ammend half day
+                        ts_ = b_[:,repo.ci(c_,repo.utcc)]
+                        px_ = b_[:,repo.ci(c_,repo.lpxc)]
+                        lr_ = b_[:,repo.ci(c_,repo.lrc)]
+                        utc0= eutc-end_hour*3600  # the starting utc of second day (0:0:0)
+
+                        # assemble a tsarr from the bar       
+                        vol_= b_[:,repo.ci(c_,repo.volc)]
+                        vbs_= b_[:,repo.ci(c_,repo.vbsc)]
+                        bv_=(vol_+vbs_)/2
+                        sv_=-vol_+bv_        # negative
+                        ts_=np.tile(ts_,(2,1)).T.flatten()
+                        px_=np.tile(px_,(2,1)).T.flatten()
+                        bs_=np.array([bv_,sv_]).T.flatten()
+                        ta_=np.array([ts_,px_,bs_]).T
+
+                        ix = np.searchsorted(ts_,utc0+1e-6) # ix is the start ix of the second day
+                        assert ts_[ix-1] == utc0, '%s not in bar repo of %s!'\
+                                %(datetime.datetime.fromtimestamp(utc0).strftime('%Y%m%d:%H%M%S'), \
+                                repo_bar_path)
+
+                        if pday not in da :
+                            #prepare the first ts 
+                            ix1_=ix
+                            fc_=''
+                            lastpx=px_[0]*np.exp(-lr_[0])
+                            fa=['',fa[0]]
+                            da=['',da[0]]
+                            ta=[ta_[:ix1_,:],ta[0]]
+                        else :
+                            ix0_=ix
+                            ix1_=len(ts_)
+                            fa=[fa[0],'']
+                            da=[da[0],'']
+                            ta=[ta[0],ta_[ix0_:ix1_,:]]
+
+        if len(da) != tds :
+            print 'error getting trading day ', tday, ' found only ', da, fa
             da=[] ; fa=[] ; fa=[]
             lastpx=0
             prev_con=''
-        else :
-            # this is the good case
-            da+=darr ; fa+=fcarr ; ta+=tsarr
-            # figure out the utc
-            sutc = it.local_ymd_to_utc(pday,h_ofst=start_hour)
-            eutc = it.local_ymd_to_utc(tday,h_ofst=end_hour)
+        elif not Filled :
+            # this is the good case, figure out the utc
             ix0=np.searchsorted(ta[0][:,0],sutc)
             ix1=np.searchsorted(ta[-1][:,0],eutc+1e-6)
             len0 = len(ta[0][:,0])
             len1 = len(ta[-1][:,0])
+
             if lastpx == 0 :
                 lastpx=ta[0][max(ix0-1,0),1]
 
             if ix0 >= len0 :
                 # first half day?
                 print 'starting ix as the last index of first of ', da
-                ix0 = len0-1
             if ix1 == 0 :
                 # second half day?
                 print 'ending ix as the first index of second of ', da
 
-            # need to check rolls and set the lastpx
+            # need to check rolls and update the lastpx
             if tds == 2 :
-                if fa[0] != fa[1] 
+                if fa[0] != fa[1] :
                     px_diff = ta[1][0,1]-ta[0][-1,1]
                     ta[0][:,1]+=px_diff
                     lastpx+=px_diff
@@ -353,7 +431,8 @@ def gen_bar_trd(symbol, sday, eday, dbar, kdb_path='./kdb', bar_sec=1, nc=False)
                 bar = np.array(ta[0][ix0:ix1,:])
 
             # have everything, need to get to
-            # output format bt, lr, vl, vbs, lrhl, vwap, ltt, lpx
+            # output format bt, lr, vl, vbs, lrhl, vwap, ltt, lp
+
             bt=np.arange(sutc+bar_sec,eutc+bar_sec,bar_sec)
 
             tts=np.r_[sutc,bar[:,0]]
@@ -387,12 +466,12 @@ def gen_bar_trd(symbol, sday, eday, dbar, kdb_path='./kdb', bar_sec=1, nc=False)
             b=np.vstack((bt,lr,vol,vbs,lrhl,vwap,ltt,lpx)).T
             d=tday
             c=repo.kdb_ib_col
-            dbar.remove_day(d)
-            dbar.update([b],[d],[c],bar_sec)
+            if len(bar) > 0 :
+                dbar.remove_day(d)
+                dbar.update([b],[d],[c],bar_sec)
             lastpx=lpx[-1]
             prev_con=fa[-1]
 
-        pday=tday
         it.next()
         tday=it.yyyymmdd()
 
