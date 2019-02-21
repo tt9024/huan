@@ -116,7 +116,7 @@ def bar_by_file_future_trd_day(symbol, day1, day2, kdb_path, fc=None, nc=False) 
                 if fc0 != bfn_contract :
                     print 'WARNING!  bar file contract is not front contract on ', day1, l1.FC(symbol, day1), bfn_contract
 
-        fn0 = kdb_path + '/'+symbol+'/trd/*'+day1+'*'
+        fn0 = kdb_path_by_symbol(kdb_path, symbol)+'/trd/*'+day1+'*'
         fn = glob.glob(fn0)
         trdfn = None
         if len(fn) == 1 :
@@ -160,7 +160,124 @@ def bar_by_file_future_trd_day(symbol, day1, day2, kdb_path, fc=None, nc=False) 
         day1=it.yyyymmdd()
     return ts, fcarr, darr
 
-def bar_by_file_future_trd(fn) :
+def guess_dir_trd(ua0, px0, da0, sa0, do_merge=False, ticksize=1e-8) :
+    """
+    guess the trade direction given the time,px,sz series
+    mainly for EUREX futures trade files, i.e. FDX,
+    where no trade directions are given.
+    Can be used for other venues, such as LCO,
+    where only some trade directions are given.
+    (Caution: need to find out if IB have those trade information)
+
+    ua: utc in local time
+    px: price at ua
+    da: a set of given directions, 'v','^','', where '' is 
+        to be guessed.
+    sa: size of trade, used to calculate weighted avg px
+        for ticks with the same timestammp (merge)
+        sa is strictly positive
+    return bs
+    bs: array of 1 or -1 with same length. 1=B,-1=S
+
+    Logic:
+    A simple way: take the price diff with immediate
+    previous.  if no diff, then use the existing. 
+    The first trade takes from the next. 
+    Some trades come in with the same timestamp at milli-seconds
+    I have decided to force same direction so they could be merged 
+    later. This is done by replacing the px of those ticks with
+    a wighted avg of them.
+
+    NOTE: the assumption for merge doesn't apply well. 
+    There could be multiple directions happen in 1 millisecond. 
+    Also, the weighted avg price requires the ticksize, which
+    is an additional dependancy.  SO, should disable it.
+    """
+    # merge trades with same utc and direction
+    # extend the given directions within the given merge group
+    # forward and backward to avoid conflicting given directions
+    ua=(ua0.copy()*1000.0+0.5).astype(int) ; px=px0.copy(); sa=sa0.copy(); da=da0.copy()
+    n=len(px)
+
+    if do_merge :
+        sp=np.cumsum(sa*px)
+        sz=np.cumsum(sa)
+        ix0=np.nonzero(np.abs(ua[1:]-ua[:-1])<1e-13)[0]
+        px[ix0]=0
+        ix = np.r_[np.nonzero(ua[1:]-ua[:-1])[0], n-1]
+        spix=sp[ix]-np.r_[0,sp[ix[:-1]]]
+        szix=sz[ix]-np.r_[0,sz[ix[:-1]]]
+        px[ix]=spix/szix  # weighted avg price
+        # this fills the merge group with the weighted avg price
+        # ensure the subsequent logic produces same direction for
+        # the merge group
+        repo.fwd_bck_fill(px,v=0,fwd_fill=False,bck_fill=True) 
+        px = (px/ticksize+0.5).astype(int).astype(float)*ticksize # normalize towards a small tick
+
+        # tricky part -
+        # observe the given directions within the merge group
+        # this modifies (adds to) the given directions directly
+        ixd=np.nonzero(da!='')[0]
+        if len(ixd) > 0 :
+            ix0=np.union1d(ix0,ix0+1) # all the indexes subject for merge
+            eqix=np.intersect1d(ix0,ixd)  # the seeds to be propagated within merge group
+            if len(eqix) > 0 :
+                # eqix to be propagate towards neighboring indexes
+                # forward propagate seed first
+                # in case there are multiple seeds (with contradicting directions)
+                for sn,sdstr in zip([1, -1 ],['right','left']):
+                    eqix0=eqix.copy()
+                    cnt=1
+                    # ixd maintains to be current idx with direction
+                    while True :
+                        """
+                        # just to show how compliccated and wrong the code could be!
+                        # ixd0 is currently undecided directions
+                        ixd0=np.intersect1d(np.delete(np.arange(n),ixd), np.clip(eqix+cnt*sn,0,n-1))
+                        if len(ixd0)==0 :
+                            break
+
+                        ixeq0=np.clip(np.searchsorted(ua[eqix], ua[ixd0],side=sdstr),0,len(eqix)-1)
+                        ixeq1=np.nonzero(ua[eqix][ixeq0]-ua[ixd0]==0)[0]
+                        if len(ixeq1)==0:
+                            break
+                        da[ixd0[ixeq1]]=da[eqix][ixeq0][ixeq1]
+                        ixd=np.union1d(ixd,ixd0[ixeq1])
+                        cnt+=1
+
+                        """
+                        ixd0=np.intersect1d(np.delete(np.arange(n),ixd), eqix0+cnt*sn)
+                        if len(ixd0)==0 :
+                            break
+                        t0=ua[ixd0-cnt*sn]
+                        t1=ua[ixd0]
+                        ixeq=np.nonzero(t0-t1==0)[0]
+                        if len(ixeq)==0 :
+                            break
+                        da[ixd0[ixeq]]=da[ixd0-cnt*sn][ixeq]
+                        ixd=np.union1d(ixd,ixd0[ixeq])
+                        cnt+=1
+
+    bs = np.zeros(n)
+    pd=np.r_[0,px[1:]-px[:-1]]
+    bix0=np.nonzero(da=='^')[0]
+    six0=np.nonzero(da=='v')[0]
+    # take the given direction as priority. 
+    # the fillna forward could be improved by
+    # also take given first and then fill the rest
+    nix0=np.nonzero(da=='')[0]
+    bix1=np.intersect1d(np.nonzero(pd>ticksize/2)[0],nix0)
+    six1=np.intersect1d(np.nonzero(pd<-ticksize/2)[0],nix0)
+    bs[np.r_[bix0,bix1]]=1
+    bs[np.r_[six0,six1]]=-1
+    # the first one
+    ix0=np.nonzero(bs)[0][0]
+    bs[0]=-bs[ix0]
+    # fill forward
+    repo.fwd_bck_fill(bs, v=0)
+    return bs
+
+def bar_by_file_future_trd(fn,guess_dir=True) :
     """
     date,ric,time,gmt_offset,price,volume,tic_dir
     2009.10.28,CLZ9,00:00:00.224,-4,,58,
@@ -171,36 +288,59 @@ def bar_by_file_future_trd(fn) :
     price can be none, a implied trade or block trade
     tic_dir: ^ buy v sell
 
+    Note: if guess_dir is True, for EURX symbols,
+    then the direction is the diff from prev px. 
+    diff zero filled by prev direction. First dir is lost
+
     Return:
     [utc, px, bsvol]
     """
-    bar_raw=np.genfromtxt(fn,delimiter=',',usecols=[0,2,3,4,5,6],skip_header=5,dtype=[('day','|S12'),('time','|S16'),('gmtoff','i8'),('px','<f8'),('sz','i8'),('dir','|S2')])
+    bar_raw=np.genfromtxt(fn,delimiter=',',usecols=[0,2,3,4,5,6],skip_header=5,dtype=[('day','|S12'),('time','|S16'),('gmtoff','i8'),('px','<f8'),('sz','f8'),('dir','|S2')])
     ts=[]
+    gix=np.nonzero(np.isfinite(bar_raw['px']))[0]
+    print 'read trd %s size(%d) lines(%d) good(%f)'%(fn, os.stat(fn).st_size, len(bar_raw), float(len(gix))/len(bar_raw))
+    bar_raw=bar_raw[gix]
+    assert len(bar_raw) >0 ,  'read zero bars!'
+    px = bar_raw['px']
+    sz = bar_raw['sz']
+    # some sizes could be missing, replace with 1
+    ix1=np.nonzero(np.isnan(sz))[0]
+    if len(ix1) > 0 :
+        print 'got %d missing size, setting all to 1!'%(len(ix1))
+        sz[ix1]=1
+    sz=sz.astype(int)
+
+    ixz=np.nonzero(sz==0)[0]
+    if len(ixz)>0 :
+        print 'setting %d zero sizes to 1'%(len(ixz))
+        sz[ixz]=1
+    assert len(np.nonzero(sz<0)[0])==0, 'got negative sizes from %s!'%(fn)
+    # deal with the time
+    ua=[]
     for i, b in enumerate(bar_raw) :
-        if b['dir'] == '' :
-            continue
         dt = datetime.datetime.strptime(b['day'] + ' ' +b['time'], '%Y.%m.%d %H:%M:%S.%f')
-        utc = l1.TradingDayIterator.local_dt_to_utc(dt, micro_fraction=True)
-        """
-        #dt = datetime.datetime.strftime('%Y.%.%d %H:%M:%S.%f', b['day'] + ' ' +b['time'])
-        gmtoff=b['gmtoff']
-        dd = datetime.timedelta(0, abs(gmtoff)*3600)
-        utc = l1.TradingDayIterator.local_dt_to_utc(dt + np.sign(gmtoff)*dd)
-        """
-        if b['dir']=='v' :
-            bs = -1
-        elif b['dir'] == '^' :
-            bs = 1
-        else :
-            raise ValueError('%s line %d got unknown direction in trd file %s'%(fn, i, b['dir']))
-        ts.append([utc, b['px'], b['sz']*bs])
+        utc = l1.TradingDayIterator.dt_to_utc(dt, 'GMT', micro_fraction=True) - b['gmtoff']*3600
+        ua.append(utc)
+    ua=np.array(ua)
 
-    # merge trades with same milli, px and direction
-    ts = np.array(ts)
+    # getting the trade directions
+    if guess_dir :
+        bs=guess_dir_trd(ua,px,bar_raw['dir'],sz) 
+    else :
+        bs=np.zeros(len(ua))
+        ixb=np.nonzero(bar_raw['dir']=='^')[0]
+        bs[ixb]=1
+        ixs=np.nonzero(bar_raw['dir']=='v')[0]
+        bs[ixs]=-1
+        ixz=np.nonzero(bs==0)[0]
+        if len(ixz) > 0 :
+            print '%d bars have no directions, try set guess_dir=True'%(len(ixz))
 
+    # merge trades with same utc and direction
+    ts = np.array([ua,px,bs*bar_raw['sz']]).T
     ux = ts[:,0]*np.sign(ts[:,2])
     sz=np.cumsum(ts[:,2])
-    ix = np.r_[np.nonzero(np.abs(ux[1:]-ux[:-1]) > 1e-13)[0], len(ux)-1]
+    ix = np.r_[np.nonzero(np.abs(ux[1:]-ux[:-1])>1e-13)[0], len(ux)-1]
     ts=ts[ix, :2]
     ts=np.vstack((ts.T, sz[ix]-np.r_[0, sz[ix[:-1]]])).T
     return ts
@@ -364,7 +504,6 @@ def gen_bar_trd(symbol, sday, eday, repo_trd_path, repo_bar_path, kdb_path='./kd
                         ts_ = b_[:,repo.ci(c_,repo.utcc)]
                         px_ = b_[:,repo.ci(c_,repo.lpxc)]
                         lr_ = b_[:,repo.ci(c_,repo.lrc)]
-                        utc0= eutc-end_hour*3600  # the starting utc of second day (0:0:0)
 
                         # assemble a tsarr from the bar       
                         vol_= b_[:,repo.ci(c_,repo.volc)]
@@ -376,25 +515,42 @@ def gen_bar_trd(symbol, sday, eday, repo_trd_path, repo_bar_path, kdb_path='./kd
                         bs_=np.array([bv_,sv_]).T.flatten()
                         ta_=np.array([ts_,px_,bs_]).T
 
-                        ix = np.searchsorted(ts_,utc0+1e-6) # ix is the start ix of the second day
-                        assert ts_[ix-1] == utc0, '%s not in bar repo of %s!'\
-                                %(datetime.datetime.fromtimestamp(utc0).strftime('%Y%m%d:%H%M%S'), \
-                                repo_bar_path)
-
                         if pday not in da :
-                            #prepare the first ts 
-                            ix1_=ix
-                            fc_=''
-                            lastpx=px_[0]*np.exp(-lr_[0])
-                            fa=['',fa[0]]
-                            da=['',da[0]]
-                            ta=[ta_[:ix1_,:],ta[0]]
+                            utc0=ta[0][0,0]
+                            ix=np.searchsorted(ts_,utc0)
+                            # if ix == 0, first ta[0]
+                            # will be zero, to be handled below
+                            if ix == 0 :
+                                # all needed is the ta[0]
+                                # divide them into two files and update lastpx
+                                ix0=np.searchsorted(ta[0][:,0],sutc-1e-6)
+                                ix1=ta[0].shape[0]
+                                lastpx=ta[0][ix0,1]*np.exp(-lr_[0])
+                                fa=[fa[0],fa[0]]
+                                da=['',da[0]]
+                                ixm=ix0+(ix1-ix0)/2
+                                ta=[ta[0][ix0:ixm,:], ta[0][ixm:ix1,:]]
+                            else :
+                                lastpx=px_[0]*np.exp(-lr_[0])
+                                fa=['',fa[0]]
+                                da=['',da[0]]
+                                ta=[ta_[:ix,:],ta[0]]
                         else :
-                            ix0_=ix
-                            ix1_=len(ts_)
-                            fa=[fa[0],'']
-                            da=[da[0],'']
-                            ta=[ta[0],ta_[ix0_:ix1_,:]]
+                            utc0=ta[0][-1,0]
+                            ix=np.searchsorted(ts_,utc0)
+                            if ix == len(ts) :
+                                ix0=np.searchsorted(ta[0][:,0],sutc-1e-6)
+                                ix1=np.searchsorted(ta[0][:,0],eutc+1e-6)
+                                ixm=ix0+(ix1-ix0)/2
+                                fa=[fa[0],fa[0]]
+                                da=[da[0],'']
+                                ta=[ta[0][ix0:ixm,:],ta[0][ixm:ix1,:]]
+                            else :
+                                ix0_=ix
+                                ix1_=len(ts_)
+                                fa=[fa[0],'']
+                                da=[da[0],'']
+                                ta=[ta[0],ta_[ix0_:ix1_,:]]
 
         if len(da) != tds :
             print 'error getting trading day ', tday, ' found only ', da, fa
@@ -402,7 +558,8 @@ def gen_bar_trd(symbol, sday, eday, repo_trd_path, repo_bar_path, kdb_path='./kd
             lastpx=0
             prev_con=''
         elif not Filled :
-            # this is the good case, figure out the utc
+            # this is the good case, prepare for the bar
+            """
             ix0=np.searchsorted(ta[0][:,0],sutc)
             ix1=np.searchsorted(ta[-1][:,0],eutc+1e-6)
             len0 = len(ta[0][:,0])
@@ -429,48 +586,72 @@ def gen_bar_trd(symbol, sday, eday, repo_trd_path, repo_bar_path, kdb_path='./kd
                 if fa[0] != prev_con :
                     lastpx=ta[0][0,1]
                 bar = np.array(ta[0][ix0:ix1,:])
+            
+            """
+            # 1) get bar with start/stop, 2) contract updated 3) lastpx
+            # need to allow for entire content being in one ta, i.e. some
+            # days having tds==2 but all contents in one ta, due to gmt_offset
+            px_diff=0
+            if tds==2:
+                if fa[0] != fa[1] :
+                    # adjust price
+                    px_diff=ta[1][0,1]-ta[0][-1,1]
+                    ta[0][:,1]+=px_diff
+                bar=np.vstack(ta)
+            else :
+                if fa[0]!=prev_con:
+                    lastpx=ta[0][0,1]
+                bar=ta[0]
+            ix0=np.searchsorted(bar[:,0],sutc)
+            ix1=np.searchsorted(bar[:,0],eutc+1e-6)
+            if lastpx==0 :
+                lastpx=bar[max(ix0-1,0),1]
+            else :
+                lastpx+=px_diff
+            bar=bar[ix0:ix1,:]
 
-            # have everything, need to get to
-            # output format bt, lr, vl, vbs, lrhl, vwap, ltt, lp
 
-            bt=np.arange(sutc+bar_sec,eutc+bar_sec,bar_sec)
-
-            tts=np.r_[sutc,bar[:,0]]
-            pts=np.r_[bar[0,1],bar[:,1]]
-            vts=np.r_[0,bar[:,2]]
-            pvts=np.abs(vts)*pts
-
-            pxix=np.clip(np.searchsorted(tts[1:],bt+1e-6),0,len(tts)-1)
-            lpx=pts[pxix]
-            lr = np.log(np.r_[lastpx,lpx])
-            lr=lr[1:]-lr[:-1]
-
-            # tricky way to get index right on volumes
-            btdc=np.r_[0,np.cumsum(vts)[pxix]]
-            vbs=btdc[1:]-btdc[:-1]
-            btdc=np.r_[0,np.cumsum(np.abs(vts))[pxix]]
-            vol=btdc[1:]-btdc[:-1]
-
-            # even tickier way to get vwap/ltt right
-            ixg=np.nonzero(vol)[0]
-            btdc=np.r_[0, np.cumsum(pvts)[pxix]]
-            vwap=lpx.copy()  #when there is no vol
-            vwap[ixg]=(btdc[1:]-btdc[:-1])[ixg]/vol[ixg]
-            ltt=np.zeros(len(bt))
-            ltt[ixg]=tts[pxix][ixg]
-            repo.fwd_bck_fill(ltt, v=0)
-
-            # give up, ignore the lrhl for trd bars
-            lrhl=np.zeros(len(bt))
-
-            b=np.vstack((bt,lr,vol,vbs,lrhl,vwap,ltt,lpx)).T
-            d=tday
-            c=repo.kdb_ib_col
             if len(bar) > 0 :
+                # have everything, need to get to
+                # output format bt, lr, vl, vbs, lrhl, vwap, ltt, lp
+
+                bt=np.arange(sutc+bar_sec,eutc+bar_sec,bar_sec)
+
+                tts=np.r_[sutc,bar[:,0]]
+                pts=np.r_[bar[0,1],bar[:,1]]
+                vts=np.r_[0,bar[:,2]]
+                pvts=np.abs(vts)*pts
+
+                pxix=np.clip(np.searchsorted(tts[1:],bt+1e-6),0,len(tts)-1)
+                lpx=pts[pxix]
+                lr = np.log(np.r_[lastpx,lpx])
+                lr=lr[1:]-lr[:-1]
+
+                # tricky way to get index right on volumes
+                btdc=np.r_[0,np.cumsum(vts)[pxix]]
+                vbs=btdc[1:]-btdc[:-1]
+                btdc=np.r_[0,np.cumsum(np.abs(vts))[pxix]]
+                vol=btdc[1:]-btdc[:-1]
+
+                # even tickier way to get vwap/ltt right
+                ixg=np.nonzero(vol)[0]
+                btdc=np.r_[0, np.cumsum(pvts)[pxix]]
+                vwap=lpx.copy()  #when there is no vol
+                vwap[ixg]=(btdc[1:]-btdc[:-1])[ixg]/vol[ixg]
+                ltt=np.zeros(len(bt))
+                ltt[ixg]=tts[pxix][ixg]
+                repo.fwd_bck_fill(ltt, v=0)
+
+                # give up, ignore the lrhl for trd bars
+                lrhl=np.zeros(len(bt))
+
+                b=np.vstack((bt,lr,vol,vbs,lrhl,vwap,ltt,lpx)).T
+                d=tday
+                c=repo.kdb_ib_col
                 dbar.remove_day(d)
                 dbar.update([b],[d],[c],bar_sec)
-            lastpx=lpx[-1]
-            prev_con=fa[-1]
+                lastpx=lpx[-1]
+                prev_con=fa[-1]
 
         it.next()
         tday=it.yyyymmdd()
@@ -733,6 +914,39 @@ future_csv_tz = {
         'ZB'  :'US/Central',\
         'ZC'  :'US/Central',\
         }
+
+def kdb_path_by_symbol(kdb_hist_path, symbol) :
+    venue_path=''
+    symbol_path=symbol
+    venue = l1.venue_by_symbol(symbol)
+    sym = symbol
+    future_match='??'
+    if venue == 'FX' :
+        if symbol not in kdb_fx_symbols :
+            raise ValueError('FX Symbol '+symbol+' not found in KDB!')
+        venue_path = 'FX/'
+        future_match=''
+        symbol_path = sym.replace('.', '')
+        if 'USD' in symbol_path :
+            symbol_path = symbol_path.replace('USD','')
+            sym = symbol_path+'='
+        else :
+            sym = symbol_path + '=R'
+            symbol_path = symbol_path+'R'
+    elif venue == 'ETF' :
+        venue_path = 'ETF/'
+        future_match=''
+    elif venue == 'FXFI' :
+        venue_path = 'FXFI/'
+        future_match=''
+    elif sym in l1.RicMap.keys() :
+        symbol_path = symbol
+        sym = l1.RicMap[symbol]
+    elif symbol in ['ZB', 'ZN', 'ZF'] :
+        m0 = {'ZB':'US', 'ZN':'TY', 'ZF':'FV'}
+        symbol_path = m0[symbol]
+    ret_path = kdb_hist_path + '/' + venue_path + symbol_path
+    return ret_path
 
 def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path='.', old_cl_repo = None) :
     year =  str(year)  # expects a string

@@ -158,11 +158,13 @@ def sync_lr_by_lpx(dbar, day, upd_col=None) :
     except :
         traceback.print_exc()
 
-def fwd_bck_fill(d0, v=0) :
+def fwd_bck_fill(d0, v=0, fwd_fill=True, bck_fill=True) :
     """
     backward and forward fill value in d that equals to v
     Such as d = lpx, v = 0 for missing values
     It works only for float values
+    NOTE if both fills are true, fwd_fill is always BEFORE
+    bck_fill.
     """
     if d0.dtype == np.dtype('int') :
         d = d0.astype(float)
@@ -172,8 +174,10 @@ def fwd_bck_fill(d0, v=0) :
         ix = np.nonzero(d==v)[0]
         d[ix]=np.nan
     df=pd.DataFrame(d)
-    df.fillna(method='ffill',inplace=True)
-    df.fillna(method='bfill',inplace=True)
+    if fwd_fill:
+        df.fillna(method='ffill',inplace=True)
+    if bck_fill:
+        df.fillna(method='bfill',inplace=True)
     if d0.dtype == np.dtype('int') :
         d0[:] = d.astype(int)
 
@@ -497,7 +501,9 @@ class RepoDailyBar :
                 bfn = self.path+'/daily/'+day+'/bar.npz'
                 bar = np.load(bfn)['bar']
             except :
-                raise ValueError(bfn+' not found but is in the repo index')
+                print bfn+' not found but is in the repo index'
+                self.remove_day(day)
+                return [], [], 0
         else :
             return [], [], 0
 
