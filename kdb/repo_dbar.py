@@ -749,7 +749,7 @@ def getdt(utcarr) :
         dt.append(datetime.datetime.fromtimestamp(utc))
     return dt
 
-def plot_repo(repo_path_arr, symbol_arr, sday, eday, bsarr=None) :
+def plot_repo(repo_path_arr, symbol_arr, sday, eday, bsarr=None, plotdt=True) :
     """
     For each symbol in symbol_arr :
         create a new figure
@@ -774,7 +774,11 @@ def plot_repo(repo_path_arr, symbol_arr, sday, eday, bsarr=None) :
             dbar = RepoDailyBar(sym, repo_path=rp)
             bar5m = dbar.daily_bar(sday, 0, bs, end_day=eday, group_days=1); 
             bar5m = np.vstack(bar5m)
-            dt = getdt(bar5m[:, 0])
+            if plotdt :
+                dt = getdt(bar5m[:, 0])
+            else :
+                dt = bar5m[:,0]
+
             lr = bar5m[:, 1]
             vol = bar5m[:,2]
             vbs = bar5m[:, 3]

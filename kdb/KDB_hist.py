@@ -118,6 +118,13 @@ def bar_by_file_future_trd_day(symbol, day1, day2, kdb_path, fc=None, nc=False) 
 
         fn0 = kdb_path_by_symbol(kdb_path, symbol)+'/trd/*'+day1+'*'
         fn = glob.glob(fn0)
+        # filter out the spread files from fn
+        for f0 in fn :
+            if len(f0.split('/')[-1].split('_')[0].split('-'))>1:
+                print 'removing ', f0, ' not a recognized trade file!'
+                fn.remove(f0)
+                break
+
         trdfn = None
         if len(fn) == 1 :
             if not nc :
@@ -149,9 +156,12 @@ def bar_by_file_future_trd_day(symbol, day1, day2, kdb_path, fc=None, nc=False) 
                     trdfn = fn[ix[0]]
 
         if trdfn is not None :
-            ts.append(bar_by_file_future_trd(trdfn))
-            fcarr.append(trdfn.split('/')[-1].split('_')[0])
-            darr.append(day1)
+            try :
+                ts.append(bar_by_file_future_trd(trdfn))
+                fcarr.append(trdfn.split('/')[-1].split('_')[0])
+                darr.append(day1)
+            except:
+                print 'problem getting bar from trade file ', trdfn, ' continue...'
 
         else :
             print 'no trd file found on ', day1, ' symbol ', symbol, ' glob ', fn0
@@ -277,6 +287,84 @@ def guess_dir_trd(ua0, px0, da0, sa0, do_merge=False, ticksize=1e-8) :
     repo.fwd_bck_fill(bs, v=0)
     return bs
 
+def find_patch_days(symarr,sday,eday,kdb_path='./kdb', check_col='px') :
+    """
+    just because I had a bug in using
+    bar_raw['sz'] instead of sz at the end!
+    I lost all zero size ticks. Would like to 
+    get them as size 1 trade with lpx/lr updates!
+    This is important for earlier days. 
+    check_col could be either 'px' or 'sz'
+    """
+    fza={}
+    for symbol in symarr :
+        fn0 = kdb_path_by_symbol(kdb_path, symbol)+'/trd/*_trd*'
+        fa=glob.glob(fn0)
+        fza[symbol]={'d':[],'f':[]}
+        for i, fn in enumerate(fa) :
+            try :
+                tday=fn.split('/')[-1].split('_')[-1].split('.')[0]
+                if tday<sday or tday>eday :
+                    continue
+                print 'checking ', fn
+                bar_raw=np.genfromtxt(fn,delimiter=',',usecols=[4,5,6],skip_header=5,dtype=[('px','<f8'),('sz','<f8'),('dir','|S2')])
+                n = len(bar_raw)
+                ix=[]
+                if n> 0 :
+                    val = bar_raw['px']
+                    gix=np.nonzero(np.isfinite(val))[0]
+                    bar_raw=bar_raw[gix]
+                    if check_col == 'px':
+                        ix=np.nonzero(bar_raw['px']==0)[0]
+                        if len(ix) == 0:
+                            ix=ix_bad_px_trd(bar_raw)
+                    elif check_col=='sz' :
+                        val = bar_raw['sz']
+                        ix=np.nonzero(val==0)[0]
+                    else :
+                        print 'unknown check_col!'
+                        return fza
+                    if len(ix) > 0 :
+                        fza[symbol]['f'].append(fn)
+                        fza[symbol]['d'].append(tday)
+            except (KeyboardInterrupt) :
+                print 'interrupt!'
+                return fza
+            except :
+                print 'problem with ', fn
+            if i % 100 == 0 :
+                print symbol, i, fza[symbol]['d']
+    return fza
+
+def ix_bad_px_trd(bar_raw) :
+    # such prices in 6E or 6A, typically without a direction,
+    # could get stuck to a number and show huge sizes. 
+    # this must be bad parser with KDB app
+    # The sizes are not in the KDB bar and since price bad, cannot guess.
+    # mark as bad to be 10 pip (0.1%) diff with neighboring good ticks (w/ dir)
+    bix=np.nonzero(bar_raw['dir']=='')[0]
+    if len(bix)>0 :
+        gix=np.delete(np.arange(len(bar_raw)),bix)
+        px=bar_raw['px'][gix]
+        bpx=bar_raw['px'][bix]
+        gix1=np.clip(np.searchsorted(gix,bix),0,len(gix)-1)
+        gix0=np.clip(gix1-1,0,len(gix)-1)
+        gix11=np.clip(gix1+1,0,len(gix)-1)
+        gix00=np.clip(gix0-1,0,len(gix)-1)
+        mpx=(px[gix1]+px[gix0])/3+(px[gix00]+px[gix11])/6
+        dpx=np.abs(mpx-bpx)/mpx
+        ix_=np.nonzero(dpx>0.001)[0]
+        if len(ix_)>0 :
+            if len(ix_) > max(len(bpx)/100,5) :
+                print len(ix_), ' stucked non-directional price detected, excluding all non-directional!'
+                ix_=np.arange(len(bpx))
+            print len(ix_), ' bad prices out of ', len(bix), ' non-directinal ticks'
+            # Just to eyeball the numbers
+            #for g0, b0 in zip(mpx[ix_], bar_raw['px'][bix[ix_]]) :
+            #    print g0, b0, np.abs(g0-b0)/g0
+            return bix[ix_]
+    return []
+
 def bar_by_file_future_trd(fn,guess_dir=True) :
     """
     date,ric,time,gmt_offset,price,volume,tic_dir
@@ -300,7 +388,25 @@ def bar_by_file_future_trd(fn,guess_dir=True) :
     gix=np.nonzero(np.isfinite(bar_raw['px']))[0]
     print 'read trd %s size(%d) lines(%d) good(%f)'%(fn, os.stat(fn).st_size, len(bar_raw), float(len(gix))/len(bar_raw))
     bar_raw=bar_raw[gix]
+
+    # zero prices should be removed
+    zix=np.nonzero(np.abs(bar_raw['px'])>1e-8)[0]
+    if len(zix) < len(bar_raw) :
+        print 'removing ', len(bar_raw)-len(zix), ' zero price ticks!'
+        bar_raw=bar_raw[zix]
+
     assert len(bar_raw) >0 ,  'read zero bars!'
+
+    # finally, bad prices should be removed
+    # such prices in 6E or 6A, typically without a direction,
+    # could get stuck to a number and show huge sizes. 
+    # The sizes are not in the KDB bar and since price bad, cannot guess.
+    # mark as bad to be 10 pip (0.1%) diff with neighboring good ticks (w/ dir)
+    bix=ix_bad_px_trd(bar_raw)
+    if len(bix)>0 :
+        print len(bix), ' bad non-directional ticks removed due to bad price!'
+        bar_raw=np.delete(bar_raw,bix)
+    
     px = bar_raw['px']
     sz = bar_raw['sz']
     # some sizes could be missing, replace with 1
@@ -337,7 +443,7 @@ def bar_by_file_future_trd(fn,guess_dir=True) :
             print '%d bars have no directions, try set guess_dir=True'%(len(ixz))
 
     # merge trades with same utc and direction
-    ts = np.array([ua,px,bs*bar_raw['sz']]).T
+    ts = np.array([ua,px,bs*sz]).T
     ux = ts[:,0]*np.sign(ts[:,2])
     sz=np.cumsum(ts[:,2])
     ix = np.r_[np.nonzero(np.abs(ux[1:]-ux[:-1])>1e-13)[0], len(ux)-1]
@@ -402,7 +508,7 @@ def bar_by_file_etf(fn, skip_header=5) :
     ix=np.argsort(bar[:, 0])
     return bar[ix, :]
 
-def gen_bar_trd(symbol, sday, eday, repo_trd_path, repo_bar_path, kdb_path='./kdb', bar_sec=1, nc=False) :
+def gen_bar_trd(sym_array, sday, eday, repo_trd_path, repo_bar_path, kdb_path='./kdb', bar_sec=1, nc=False, check_col=None) :
     """
     getting from the ts [utc, px, signed_vol]
     output format bt, lr, vl, vbs, lrhl, vwap, ltt, lpx
@@ -410,7 +516,11 @@ def gen_bar_trd(symbol, sday, eday, repo_trd_path, repo_bar_path, kdb_path='./kd
     repo_trd_path: repo to store the 1S trd bars
     repo_bar_path: repo to read the 5S kdb bars. Needed for
                    Sunday nights and missing days
-
+    check_col: 'px' or 'sz', only run on those symbol/days
+               that the colume has a zero. i.e. a day with zero px or sz
+    use_repo_overnight_lr: if True, try to get the first lr from repo
+               and set to the new data. This is useful when only
+               updating a random sets of days that 
     return : None
         update (remove first) dbar with bar_arr, days, col_arr
 
@@ -432,229 +542,264 @@ def gen_bar_trd(symbol, sday, eday, repo_trd_path, repo_bar_path, kdb_path='./kd
        use the 5 second to stict it. Distribute all
        trades to the last second of the 5 second interval
        and taking the overnight log-ret
+
+    Bigger than biggest problem:
+    1. trades that has no direction: 
+       Can be guessed, a simple way is better, a more
+       complicated way is tried but no good
+    
+    Bigger than Bigger than biggest problem:
+    1. ZERO SIZE TRADES!
+    Due to CME's policy or Reuter's data,
+    All CME symbols seem to have mostly zero size trade 
+    during 9am to 15:15pm NewYork Time, until 2007-01-01.
+    The following assets seems to not having such zero sizes
+    ES, FDX, LCO, 6C, STXE, FGB*, ZN is fine.
+    There is nothing I can do with it, KDB Bar having the
+    exactly same information, worse, sometimes with contradictory
+    directions.  There is no sure way to tell which one is
+    correct and I decided to leave the trade directions as is.
+    Another thing is to add trade count into each second bar.
+
+    2. Zero prices
+    Some CME FX, such as 6J, have zero prices, with size, no dir. 
+    The KDB bars don't include them, and although the size is big,
+    they don't seem to impact the market.  Seems to be spread or
+    implied trade.  Without price, it's impossible to "tell" dir.
+    And I suspect it won't show in IB. So just ignore those zero prices.
+
+    3. Spikes in price. Some early days have such spike, due to 
+       market iliquidity.  Modeul should remove outliers.
     """
 
-    try :
-        dbar = repo.RepoDailyBar(symbol, repo_path=repo_trd_path)
-    except :
-        print 'repo_trd_path failed, trying to create'
-        dbar = repo.RepoDailyBar(symbol, repo_path=repo_trd_path, create=True)
-
-    try :
-        dbar5S = repo.RepoDailyBar(symbol, repo_path=repo_bar_path)
-    except :
-        print 'repo_bar_path failed, no ammending from 5S bar is possible!'
-        dbar5S = None
-
-    start_hour, end_hour = l1.get_start_end_hour(symbol)
-    TRADING_HOURS=end_hour-start_hour
-    # sday has to be a trading day
-    it = l1.TradingDayIterator(sday)
-    tday = it.yyyymmdd()
-    if tday != sday :
-        raise ValueError('sday has to be a trading day! sday: '+sday + ' trd_day: ' + tday)
-
-    tds = 1
-    if start_hour < 0 :
-        tds = 2
-    da = [] ; ta = [] ;  fa = []
-    lastpx=0
-    prev_con=''
-    while tday <= eday :
-        eutc = it.local_ymd_to_utc(tday,h_ofst=end_hour)
-        sutc = eutc - (TRADING_HOURS)*3600
-        pday = datetime.datetime.fromtimestamp(sutc).strftime('%Y%m%d')
-
-        # get for trading day
-        if len(da) == 2 and da[1] == pday :
-            day0 = tday
-            da=[da[-1]] ; ta=[ta[-1]] ; fa=[fa[-1]]
+    # my hack for figure out the patch run targets
+    fza=None
+    use_repo_overnight_lr=False
+    if check_col is not None :
+        fza=find_patch_days(sym_array,sday,eday,kdb_path=kdb_path,check_col=check_col)
+        use_repo_overnight_lr=True
+    for symbol in sym_array :
+        if fza is not None :
+            fda=np.unique(fza[symbol]['d'])
+            if len(fda)==0 :
+                continue
+            else :
+                print symbol, ' check_col ', check_col, ' running for ', fda
         else :
-            # either initial or previously broken 2-day or 1 day 
-            day0 = pday
-            da=[] ; ta=[] ; fa=[]
+            fda=None
 
         try :
-            tsarr, fcarr, darr = bar_by_file_future_trd_day(symbol, day0, tday, kdb_path=kdb_path, nc=nc)
+            dbar = repo.RepoDailyBar(symbol, repo_path=repo_trd_path)
         except :
-            tsarr=[] ; fcarr=[]; darr=[]
-        da+=darr ; fa+=fcarr ; ta+=tsarr
+            print 'repo_trd_path failed, trying to create'
+            dbar = repo.RepoDailyBar(symbol, repo_path=repo_trd_path, create=True)
 
-        Filled=False
-        # try to patch the missing days from 5S repo
-        if len(da) != tds :
-            if dbar5S is not None:
-                b_,c_,bs_=dbar5S.load_day(tday)
-                if len(b_) > 0 :
-                    if tds == 1 or len(da) == 0:
-                        # just put everything in from 5S to 1S
-                        print 'missing day', tday, ' filling from ', repo_bar_path, ' bs=',bs_
-                        if bs_ != bar_sec :
-                            print ' scaling to ', bar_sec
-                            b_ = dbar5S._scale(tday,b_,c_,bs_,c_,bar_sec)
-                        # simply write everything in and call it done
-                        dbar.remove_day(tday)
-                        dbar.update([b_],[tday],[c_],bar_sec)
-                        # no idea of prev_con
-                        prev_con=''
-                        lastpx=0
-                        Filled=True
-                    else : 
-                        # take out the bar and ammend half day
-                        ts_ = b_[:,repo.ci(c_,repo.utcc)]
-                        px_ = b_[:,repo.ci(c_,repo.lpxc)]
-                        lr_ = b_[:,repo.ci(c_,repo.lrc)]
+        try :
+            dbar5S = repo.RepoDailyBar(symbol, repo_path=repo_bar_path)
+        except :
+            print 'repo_bar_path failed, no ammending from 5S bar is possible!'
+            dbar5S = None
 
-                        # assemble a tsarr from the bar       
-                        vol_= b_[:,repo.ci(c_,repo.volc)]
-                        vbs_= b_[:,repo.ci(c_,repo.vbsc)]
-                        bv_=(vol_+vbs_)/2
-                        sv_=-vol_+bv_        # negative
-                        ts_=np.tile(ts_,(2,1)).T.flatten()
-                        px_=np.tile(px_,(2,1)).T.flatten()
-                        bs_=np.array([bv_,sv_]).T.flatten()
-                        ta_=np.array([ts_,px_,bs_]).T
+        start_hour, end_hour = l1.get_start_end_hour(symbol)
+        TRADING_HOURS=end_hour-start_hour
+        # sday has to be a trading day
+        it = l1.TradingDayIterator(sday)
+        tday = it.yyyymmdd()
+        if tday != sday :
+            raise ValueError('sday has to be a trading day! sday: '+sday + ' trd_day: ' + tday)
 
-                        if pday not in da :
-                            utc0=ta[0][0,0]
-                            ix=np.searchsorted(ts_,utc0)
-                            # if ix == 0, first ta[0]
-                            # will be zero, to be handled below
-                            if ix == 0 :
-                                # all needed is the ta[0]
-                                # divide them into two files and update lastpx
-                                ix0=np.searchsorted(ta[0][:,0],sutc-1e-6)
-                                ix1=ta[0].shape[0]
-                                lastpx=ta[0][ix0,1]*np.exp(-lr_[0])
-                                fa=[fa[0],fa[0]]
-                                da=['',da[0]]
-                                ixm=ix0+(ix1-ix0)/2
-                                ta=[ta[0][ix0:ixm,:], ta[0][ixm:ix1,:]]
+        tds = 1
+        if start_hour < 0 :
+            tds = 2
+        da = [] ; ta = [] ;  fa = []
+        lastpx=0
+        prev_con=''
+        while tday <= eday :
+            if fda is not None and tday not in fda :
+                it.next()
+                tday=it.yyyymmdd()
+                continue
+
+            eutc = it.local_ymd_to_utc(tday,h_ofst=end_hour)
+            sutc = eutc - (TRADING_HOURS)*3600
+            pday = datetime.datetime.fromtimestamp(sutc).strftime('%Y%m%d')
+
+            # get for trading day
+            if len(da) == 2 and da[1] == pday :
+                day0 = tday
+                da=[da[-1]] ; ta=[ta[-1]] ; fa=[fa[-1]]
+            else :
+                # either initial or previously broken 2-day or 1 day 
+                day0 = pday
+                da=[] ; ta=[] ; fa=[]
+
+            try :
+                tsarr, fcarr, darr = bar_by_file_future_trd_day(symbol, day0, tday, kdb_path=kdb_path, nc=nc)
+            except (KeyboardInterrupt) :
+                print 'interrupt!'
+                return
+            except :
+                tsarr=[] ; fcarr=[]; darr=[]
+            da+=darr ; fa+=fcarr ; ta+=tsarr
+
+            Filled=False
+            # try to patch the missing days from 5S repo
+            if len(da) != tds :
+                if dbar5S is not None:
+                    b_,c_,bs_=dbar5S.load_day(tday)
+                    if len(b_) > 0 :
+                        if tds == 1 or len(da) == 0:
+                            # just put everything in from 5S to 1S
+                            print 'missing day', tday, ' filling from ', repo_bar_path, ' bs=',bs_
+                            if bs_ != bar_sec :
+                                print ' scaling to ', bar_sec
+                                b_ = dbar5S._scale(tday,b_,c_,bs_,c_,bar_sec)
+                            # simply write everything in and call it done
+                            dbar.remove_day(tday)
+                            dbar.update([b_],[tday],[c_],bar_sec)
+                            # no idea of prev_con
+                            prev_con=''
+                            lastpx=0
+                            Filled=True
+                        else : 
+                            # take out the bar and ammend half day
+                            ts_ = b_[:,repo.ci(c_,repo.utcc)]
+                            px_ = b_[:,repo.ci(c_,repo.lpxc)]
+                            lr_ = b_[:,repo.ci(c_,repo.lrc)]
+
+                            # assemble a tsarr from the bar       
+                            vol_= b_[:,repo.ci(c_,repo.volc)]
+                            vbs_= b_[:,repo.ci(c_,repo.vbsc)]
+                            bv_=(vol_+vbs_)/2
+                            sv_=-vol_+bv_        # negative
+                            ts_=np.tile(ts_,(2,1)).T.flatten()
+                            px_=np.tile(px_,(2,1)).T.flatten()
+                            bs_=np.array([bv_,sv_]).T.flatten()
+                            ta_=np.array([ts_,px_,bs_]).T
+
+                            if pday not in da :
+                                utc0=ta[0][0,0]
+                                ix=np.searchsorted(ts_,utc0)
+                                # if ix == 0, first ta[0]
+                                # will be zero, to be handled below
+                                if ix == 0 :
+                                    # all needed is the ta[0]
+                                    # divide them into two files and update lastpx
+                                    ix0=np.searchsorted(ta[0][:,0],sutc-1e-6)
+                                    ix1=ta[0].shape[0]
+                                    lastpx=ta[0][ix0,1]*np.exp(-lr_[0])
+                                    fa=[fa[0],fa[0]]
+                                    da=['',da[0]]
+                                    ixm=ix0+(ix1-ix0)/2
+                                    ta=[ta[0][ix0:ixm,:], ta[0][ixm:ix1,:]]
+                                else :
+                                    lastpx=px_[0]*np.exp(-lr_[0])
+                                    fa=['',fa[0]]
+                                    da=['',da[0]]
+                                    ta=[ta_[:ix,:],ta[0]]
                             else :
-                                lastpx=px_[0]*np.exp(-lr_[0])
-                                fa=['',fa[0]]
-                                da=['',da[0]]
-                                ta=[ta_[:ix,:],ta[0]]
-                        else :
-                            utc0=ta[0][-1,0]
-                            ix=np.searchsorted(ts_,utc0)
-                            if ix == len(ts) :
-                                ix0=np.searchsorted(ta[0][:,0],sutc-1e-6)
-                                ix1=np.searchsorted(ta[0][:,0],eutc+1e-6)
-                                ixm=ix0+(ix1-ix0)/2
-                                fa=[fa[0],fa[0]]
-                                da=[da[0],'']
-                                ta=[ta[0][ix0:ixm,:],ta[0][ixm:ix1,:]]
-                            else :
-                                ix0_=ix
-                                ix1_=len(ts_)
-                                fa=[fa[0],'']
-                                da=[da[0],'']
-                                ta=[ta[0],ta_[ix0_:ix1_,:]]
+                                utc0=ta[0][-1,0]
+                                ix=np.searchsorted(ts_,utc0)
+                                if ix == len(ts_) :
+                                    ix0=np.searchsorted(ta[0][:,0],sutc-1e-6)
+                                    ix1=np.searchsorted(ta[0][:,0],eutc+1e-6)
+                                    ixm=ix0+(ix1-ix0)/2
+                                    fa=[fa[0],fa[0]]
+                                    da=[da[0],'']
+                                    ta=[ta[0][ix0:ixm,:],ta[0][ixm:ix1,:]]
+                                else :
+                                    ix0_=ix
+                                    ix1_=len(ts_)
+                                    fa=[fa[0],'']
+                                    da=[da[0],'']
+                                    ta=[ta[0],ta_[ix0_:ix1_,:]]
 
-        if len(da) != tds :
-            print 'error getting trading day ', tday, ' found only ', da, fa
-            da=[] ; fa=[] ; fa=[]
-            lastpx=0
-            prev_con=''
-        elif not Filled :
-            # this is the good case, prepare for the bar
-            """
-            ix0=np.searchsorted(ta[0][:,0],sutc)
-            ix1=np.searchsorted(ta[-1][:,0],eutc+1e-6)
-            len0 = len(ta[0][:,0])
-            len1 = len(ta[-1][:,0])
-
-            if lastpx == 0 :
-                lastpx=ta[0][max(ix0-1,0),1]
-
-            if ix0 >= len0 :
-                # first half day?
-                print 'starting ix as the last index of first of ', da
-            if ix1 == 0 :
-                # second half day?
-                print 'ending ix as the first index of second of ', da
-
-            # need to check rolls and update the lastpx
-            if tds == 2 :
-                if fa[0] != fa[1] :
-                    px_diff = ta[1][0,1]-ta[0][-1,1]
-                    ta[0][:,1]+=px_diff
+            if len(da) != tds :
+                print 'error getting trading day ', tday, ' found only ', da, fa
+                da=[] ; fa=[] ; fa=[]
+                lastpx=0
+                prev_con=''
+            elif not Filled :
+                # this is the good case, prepare for the bar
+                # 1) get bar with start/stop, 2) contract updated 3) lastpx
+                # need to allow for entire content being in one ta, i.e. some
+                # days having tds==2 but all contents in one ta, due to gmt_offset
+                px_diff=0
+                if tds==2:
+                    if fa[0] != fa[1] :
+                        # adjust price
+                        px_diff=ta[1][0,1]-ta[0][-1,1]
+                        ta[0][:,1]+=px_diff
+                    bar=np.vstack(ta)
+                else :
+                    if fa[0]!=prev_con:
+                        lastpx=ta[0][0,1]
+                    bar=ta[0]
+                ix0=np.searchsorted(bar[:,0],sutc)
+                ix1=np.searchsorted(bar[:,0],eutc+1e-6)
+                if lastpx==0 :
+                    lastpx=bar[max(ix0-1,0),1]
+                else :
                     lastpx+=px_diff
-                bar = np.vstack((ta[0][ix0:,:], ta[1][:ix1,:]))
-            else :
-                if fa[0] != prev_con :
-                    lastpx=ta[0][0,1]
-                bar = np.array(ta[0][ix0:ix1,:])
-            
-            """
-            # 1) get bar with start/stop, 2) contract updated 3) lastpx
-            # need to allow for entire content being in one ta, i.e. some
-            # days having tds==2 but all contents in one ta, due to gmt_offset
-            px_diff=0
-            if tds==2:
-                if fa[0] != fa[1] :
-                    # adjust price
-                    px_diff=ta[1][0,1]-ta[0][-1,1]
-                    ta[0][:,1]+=px_diff
-                bar=np.vstack(ta)
-            else :
-                if fa[0]!=prev_con:
-                    lastpx=ta[0][0,1]
-                bar=ta[0]
-            ix0=np.searchsorted(bar[:,0],sutc)
-            ix1=np.searchsorted(bar[:,0],eutc+1e-6)
-            if lastpx==0 :
-                lastpx=bar[max(ix0-1,0),1]
-            else :
-                lastpx+=px_diff
-            bar=bar[ix0:ix1,:]
+                bar=bar[ix0:ix1,:]
 
+                # here we go!
+                if len(bar) > 0 :
+                    # have everything, need to get to
+                    # output format bt, lr, vl, vbs, lrhl, vwap, ltt, lp
 
-            if len(bar) > 0 :
-                # have everything, need to get to
-                # output format bt, lr, vl, vbs, lrhl, vwap, ltt, lp
+                    bt=np.arange(sutc+bar_sec,eutc+bar_sec,bar_sec)
 
-                bt=np.arange(sutc+bar_sec,eutc+bar_sec,bar_sec)
+                    tts=np.r_[sutc,bar[:,0]]
+                    pts=np.r_[bar[0,1],bar[:,1]]
+                    vts=np.r_[0,bar[:,2]]
+                    pvts=np.abs(vts)*pts
 
-                tts=np.r_[sutc,bar[:,0]]
-                pts=np.r_[bar[0,1],bar[:,1]]
-                vts=np.r_[0,bar[:,2]]
-                pvts=np.abs(vts)*pts
+                    pxix=np.clip(np.searchsorted(tts[1:],bt+1e-6),0,len(tts)-1)
+                    lpx=pts[pxix]
+                    lr = np.log(np.r_[lastpx,lpx])
+                    lr=lr[1:]-lr[:-1]
 
-                pxix=np.clip(np.searchsorted(tts[1:],bt+1e-6),0,len(tts)-1)
-                lpx=pts[pxix]
-                lr = np.log(np.r_[lastpx,lpx])
-                lr=lr[1:]-lr[:-1]
+                    # tricky way to get index right on volumes
+                    btdc=np.r_[0,np.cumsum(vts)[pxix]]
+                    vbs=btdc[1:]-btdc[:-1]
+                    btdc=np.r_[0,np.cumsum(np.abs(vts))[pxix]]
+                    vol=btdc[1:]-btdc[:-1]
 
-                # tricky way to get index right on volumes
-                btdc=np.r_[0,np.cumsum(vts)[pxix]]
-                vbs=btdc[1:]-btdc[:-1]
-                btdc=np.r_[0,np.cumsum(np.abs(vts))[pxix]]
-                vol=btdc[1:]-btdc[:-1]
+                    # even tickier way to get vwap/ltt right
+                    ixg=np.nonzero(vol)[0]
+                    btdc=np.r_[0, np.cumsum(pvts)[pxix]]
+                    vwap=lpx.copy()  #when there is no vol
+                    vwap[ixg]=(btdc[1:]-btdc[:-1])[ixg]/vol[ixg]
+                    ltt=np.zeros(len(bt))
+                    ltt[ixg]=tts[pxix][ixg]
+                    repo.fwd_bck_fill(ltt, v=0)
 
-                # even tickier way to get vwap/ltt right
-                ixg=np.nonzero(vol)[0]
-                btdc=np.r_[0, np.cumsum(pvts)[pxix]]
-                vwap=lpx.copy()  #when there is no vol
-                vwap[ixg]=(btdc[1:]-btdc[:-1])[ixg]/vol[ixg]
-                ltt=np.zeros(len(bt))
-                ltt[ixg]=tts[pxix][ixg]
-                repo.fwd_bck_fill(ltt, v=0)
+                    # give up, ignore the lrhl for trd bars
+                    lrhl=np.zeros(len(bt))
 
-                # give up, ignore the lrhl for trd bars
-                lrhl=np.zeros(len(bt))
+                    # honor repo's overnight lr
+                    if use_repo_overnight_lr :
+                        try :
+                            b_,c_,bs_=dbar.load_day(tday)
+                            if len(b_)>0 and bs_==bar_sec :
+                                lr_ = b_[:,repo.ci(c_,repo.lrc)]
+                                print 'Using the repo overnight lr ', lr_[0], '. Replacing lr: ', lr[0]
+                                lr[0]=lr_[0]
+                        except :
+                            print 'problem trying to use repo overnight lr!'
+                            traceback.print_exc()
 
-                b=np.vstack((bt,lr,vol,vbs,lrhl,vwap,ltt,lpx)).T
-                d=tday
-                c=repo.kdb_ib_col
-                dbar.remove_day(d)
-                dbar.update([b],[d],[c],bar_sec)
-                lastpx=lpx[-1]
-                prev_con=fa[-1]
+                    b=np.vstack((bt,lr,vol,vbs,lrhl,vwap,ltt,lpx)).T
+                    d=tday
+                    c=repo.kdb_ib_col
+                    dbar.remove_day(d)
+                    dbar.update([b],[d],[c],bar_sec)
+                    lastpx=lpx[-1]
+                    prev_con=fa[-1]
 
-        it.next()
-        tday=it.yyyymmdd()
+            it.next()
+            tday=it.yyyymmdd()
 
 
 def write_daily_bar(symbol,bar,bar_sec=5,old_cl_repo=None) :
@@ -1133,7 +1278,6 @@ def ingest_all_kdb_repo(kdb_path='/cygdrive/c/zfu/data/kdb', repo_path='/cygdriv
         try :
             td, _, bd = gen_bar(sym, year_s, year_e, repo=db, kdb_hist_path=kdb_path)
         except :
-            import traceback
             traceback.print_exc()
             print 'problem reading symbol ' + sym
             continue
