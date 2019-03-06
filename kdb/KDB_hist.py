@@ -317,7 +317,11 @@ def find_patch_days(symarr,sday,eday,kdb_path='./kdb', check_col='px') :
                     if check_col == 'px':
                         ix=np.nonzero(bar_raw['px']==0)[0]
                         if len(ix) == 0:
-                            ix=ix_bad_px_trd(bar_raw)
+                            sz=bar_raw['sz']
+                            nix=np.nonzero(sz>0)[0]
+                            if len(nix)>0 :
+                                bar_raw=bar_raw[nix]
+                            ix=ix_bad_px_trd(bar_raw,fn)
                     elif check_col=='sz' :
                         val = bar_raw['sz']
                         ix=np.nonzero(val==0)[0]
@@ -331,12 +335,13 @@ def find_patch_days(symarr,sday,eday,kdb_path='./kdb', check_col='px') :
                 print 'interrupt!'
                 return fza
             except :
+                traceback.print_exc()
                 print 'problem with ', fn
             if i % 100 == 0 :
                 print symbol, i, fza[symbol]['d']
     return fza
 
-def ix_bad_px_trd(bar_raw) :
+def ix_bad_px_trd(bar_raw,fn) :
     # such prices in 6E or 6A, typically without a direction,
     # could get stuck to a number and show huge sizes. 
     # this must be bad parser with KDB app
@@ -345,6 +350,11 @@ def ix_bad_px_trd(bar_raw) :
     bix=np.nonzero(bar_raw['dir']=='')[0]
     if len(bix)>0 :
         gix=np.delete(np.arange(len(bar_raw)),bix)
+        if len(gix)==0 :
+            # no directional ticks at all
+            # i.e. FDXM7_trd_20070412
+            print 'no directional trades, take all'
+            return []
         px=bar_raw['px'][gix]
         bpx=bar_raw['px'][bix]
         gix1=np.clip(np.searchsorted(gix,bix),0,len(gix)-1)
@@ -353,9 +363,15 @@ def ix_bad_px_trd(bar_raw) :
         gix00=np.clip(gix0-1,0,len(gix)-1)
         mpx=(px[gix1]+px[gix0])/3+(px[gix00]+px[gix11])/6
         dpx=np.abs(mpx-bpx)/mpx
-        ix_=np.nonzero(dpx>0.001)[0]
+        lmt=0.0005
+        sym=fn.split('/')[-1].split('_')[0][:-2]
+        if sym not in ['CL','LCO'] : 
+            # CL and LCO has big ticks
+            # tends to have bigger lmt
+            lmt=0.00025
+        ix_=np.nonzero(dpx>lmt)[0]
         if len(ix_)>0 :
-            if len(ix_) > max(len(bpx)/100,5) :
+            if len(ix_) > max(len(bpx)/5,5) :
                 print len(ix_), ' stucked non-directional price detected, excluding all non-directional!'
                 ix_=np.arange(len(bpx))
             print len(ix_), ' bad prices out of ', len(bix), ' non-directinal ticks'
@@ -364,6 +380,7 @@ def ix_bad_px_trd(bar_raw) :
             #    print g0, b0, np.abs(g0-b0)/g0
             return bix[ix_]
     return []
+
 
 def bar_by_file_future_trd(fn,guess_dir=True) :
     """
@@ -400,9 +417,9 @@ def bar_by_file_future_trd(fn,guess_dir=True) :
     # finally, bad prices should be removed
     # such prices in 6E or 6A, typically without a direction,
     # could get stuck to a number and show huge sizes. 
-    # The sizes are not in the KDB bar and since price bad, cannot guess.
-    # mark as bad to be 10 pip (0.1%) diff with neighboring good ticks (w/ dir)
-    bix=ix_bad_px_trd(bar_raw)
+    # These trades are not included in KDB bar and since price bad, 
+    # cannot guess.
+    bix=ix_bad_px_trd(bar_raw,fn)
     if len(bix)>0 :
         print len(bix), ' bad non-directional ticks removed due to bad price!'
         bar_raw=np.delete(bar_raw,bix)
@@ -713,6 +730,20 @@ def gen_bar_trd(sym_array, sday, eday, repo_trd_path, repo_bar_path, kdb_path='.
                                     fa=[fa[0],'']
                                     da=[da[0],'']
                                     ta=[ta[0],ta_[ix0_:ix1_,:]]
+
+            if tds==2 and len(da)==1 and pday not in da :
+                # a special case where prev day is Sunday and not in bar5m
+                # as the case for LCO 19980907
+                # just use whatever given and fill the Sunday night zero
+                # all needed is the ta[0]
+                # divide them into two files and update lastpx
+                print 'missing a previous half day, use the second part anyway!'
+                ix0=np.searchsorted(ta[0][:,0],sutc-1e-6)
+                ix1=ta[0].shape[0]
+                fa=[fa[0],fa[0]]
+                da=['',da[0]]
+                ixm=ix0+(ix1-ix0)/2
+                ta=[ta[0][ix0:ixm,:], ta[0][ixm:ix1,:]]
 
             if len(da) != tds :
                 print 'error getting trading day ', tday, ' found only ', da, fa
