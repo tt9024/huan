@@ -61,6 +61,8 @@ def gen_bar(sym_array, sday, eday, repo_cme_path='./repo_cme', cme_path='./cme',
         update (remove first) dbar with bar_arr, days, col_arr
     """
 
+    if nc :
+        assert repo_cme_path[-2:]=='nc', 'repo_cme_path='+repo_cme_path+' not ending with nc'
     for symbol in sym_array :
         try :
             dbar = repo.RepoDailyBar(symbol, repo_path=repo_cme_path)
@@ -82,7 +84,7 @@ def gen_bar(sym_array, sday, eday, repo_cme_path='./repo_cme', cme_path='./cme',
             eutc = it.local_ymd_to_utc(tday,h_ofst=end_hour)
             sutc = eutc - (TRADING_HOURS)*3600
             if nc :
-                con=l1.FC_next(symbol, tday)
+                con=l1.FC_next(symbol, tday)[0]
             else :
                 con=l1.FC(symbol, tday)
 
