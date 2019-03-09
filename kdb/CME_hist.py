@@ -38,6 +38,9 @@ def bar_by_file(fn) :
     # read into the ts format
     bar_raw=np.genfromtxt(tmp_f,delimiter=',',usecols=[0,2,4,5],dtype=[('utc','i8'),('dir','|S2'),('px','f8'),('sz','f8')])
 
+    # remove temp file
+    os.system('rm -f '+tmp_f)
+
     utc=bar_raw['utc']/1000
     utc=utc.astype(float)/1000000.0 # microseconds
     px=bar_raw['px']

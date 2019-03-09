@@ -6,6 +6,7 @@ import glob
 import l1
 import repo_dbar as repo
 import os
+import copy
 
 def bar_by_file(fn, symbol) :
     if symbol in kdb_future_symbols :
@@ -116,7 +117,7 @@ def bar_by_file_future_trd_day(symbol, day1, day2, kdb_path, fc=None, nc=False) 
                 if fc0 != bfn_contract :
                     print 'WARNING!  bar file contract is not front contract on ', day1, l1.FC(symbol, day1), bfn_contract
 
-        fn0 = kdb_path_by_symbol(kdb_path, symbol)+'/trd/*'+day1+'*'
+        fn0,_,_ = kdb_path_by_symbol(kdb_path, symbol)+'/trd/*'+day1+'*'
         fn = glob.glob(fn0)
         # filter out the spread files from fn
         for f0 in fn :
@@ -298,7 +299,7 @@ def find_patch_days(symarr,sday,eday,kdb_path='./kdb', check_col='px') :
     """
     fza={}
     for symbol in symarr :
-        fn0 = kdb_path_by_symbol(kdb_path, symbol)+'/trd/*_trd*'
+        fn0,_,_ = kdb_path_by_symbol(kdb_path, symbol)+'/trd/*_trd*'
         fa=glob.glob(fn0)
         fza[symbol]={'d':[],'f':[]}
         for i, fn in enumerate(fa) :
@@ -833,7 +834,7 @@ def gen_bar_trd(sym_array, sday, eday, repo_trd_path, repo_bar_path, kdb_path='.
             tday=it.yyyymmdd()
 
 
-def write_daily_bar(symbol,bar,bar_sec=5,old_cl_repo=None) :
+def write_daily_bar(symbol,bar,bar_sec=5,old_cl_repo=None, trade_day_given=None) :
     """
     input format:
          utc, utc_lt, open, high, low, close, vwap, vol, bvol, svol
@@ -844,6 +845,10 @@ def write_daily_bar(symbol,bar,bar_sec=5,old_cl_repo=None) :
          bt,lr,vl,vbs,lrhl,vwap,ltt,lpx
          Where :
              bt is the end of the bar time, as lr is observed
+
+    NOTE: this only works for CL, and no wonder it sucks so much
+          that it fails miserably for other asserts with
+          different start_hour and end_hour.  
 
     """
     import pandas as pd
@@ -873,23 +878,27 @@ def write_daily_bar(symbol,bar,bar_sec=5,old_cl_repo=None) :
     print 'last close price set to previous close at ', datetime.datetime.fromtimestamp(bar[x,0]), ' px: ', last_close_px
     day_end=datetime.datetime.fromtimestamp(bar[-1,0]).strftime('%Y%m%d')
     # deciding on the trading days
-    if dt.hour > end_hour :
-        ti=l1.TradingDayIterator(day_start,adj_start=False)
-        ti.next()
-        trd_day_start=ti.yyyymmdd()
+    if trade_day_given is not None:
+        assert trade_day_given >= day_start
+        assert trade_day_given <= day_end
+        trd_day_start=trade_day_given
+        trd_day_end=trade_day_given
     else :
-        trd_day_start=day_start
-    trd_day_end=day_end
+        if dt.hour > end_hour :
+            ti=l1.TradingDayIterator(day_start,adj_start=False)
+            ti.next()
+            trd_day_start=ti.yyyymmdd()
+        else :
+            trd_day_start=day_start
+        trd_day_end=day_end
     print 'preparing bar from ', day_start, ' to ', day_end, ' , trading days: ', trd_day_start, trd_day_end
 
-    ti=l1.TradingDayIterator(day_start, adj_start=False)
-    day=ti.yyyymmdd()  # day is the start_day
+    ti=l1.TradingDayIterator(trd_day_start)
+    day1=ti.yyyymmdd()  
     barr=[]
     trade_days = []
     col_arr = []
-    while day < day_end:
-        ti.next()
-        day1=ti.yyyymmdd()
+    while day1 <= trd_day_end:  
         utc_e = int(l1.TradingDayIterator.local_ymd_to_utc(day1, end_hour,0,0))
 
         # get start backwards for starting on a Sunday
@@ -1042,7 +1051,8 @@ def write_daily_bar(symbol,bar,bar_sec=5,old_cl_repo=None) :
             trade_days.append(day1)
             col_arr.append(repo.kdb_ib_col)
 
-        day=day1
+        ti.next()
+        day1=ti.yyyymmdd()
 
     return barr, trade_days, col_arr
 
@@ -1121,45 +1131,20 @@ def kdb_path_by_symbol(kdb_hist_path, symbol) :
     elif symbol in ['ZB', 'ZN', 'ZF'] :
         m0 = {'ZB':'US', 'ZN':'TY', 'ZF':'FV'}
         symbol_path = m0[symbol]
+        sym = m0[symbol]
     ret_path = kdb_hist_path + '/' + venue_path + symbol_path
-    return ret_path
+    return ret_path, sym, future_match
+
+def find_kdb_file_by_symbol(symbol, kdb_path='./kdb') :
+    ret_path, sym, future_match = kdb_path_by_symbol(kdb_path, symbol)
+    grep_str = ret_path +'/'+sym+future_match+'_[12]*.csv*'
+    print 'grepping for file ', grep_str
+    fn=glob.glob(grep_str)
+    return fn
 
 def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path='.', old_cl_repo = None) :
     year =  str(year)  # expects a string
-    venue_path = ''
-    symbol_path = symbol
-    venue = l1.venue_by_symbol(symbol)
-    sym = symbol
-    future_match='??'
-    if venue == 'FX' :
-        if symbol not in kdb_fx_symbols :
-            raise ValueError('FX Symbol '+symbol+' not found in KDB!')
-        venue_path = 'FX/'
-        future_match=''
-        symbol_path = sym.replace('.', '')
-        if 'USD' in symbol_path :
-            symbol_path = symbol_path.replace('USD','')
-            sym = symbol_path+'='
-        else :
-            sym = symbol_path + '=R'
-            symbol_path = symbol_path+'R'
-    elif venue == 'ETF' :
-        venue_path = 'ETF/'
-        future_match=''
-    elif venue == 'FXFI' :
-        venue_path = 'FXFI/'
-        future_match=''
-    elif sym in l1.RicMap.keys() :
-        symbol_path = symbol
-        sym = l1.RicMap[symbol]
-    elif symbol in ['ZB', 'ZN', 'ZF'] :
-        m0 = {'ZB':'US', 'ZN':'TY', 'ZF':'FV'}
-        symbol_path = m0[symbol]
-        sym = m0[symbol]
-
-    grep_str = kdb_hist_path + '/' + venue_path + symbol_path+'/'+sym+future_match+'_[12]*.csv*'
-    print 'grepping for file ', grep_str
-    fn=glob.glob(grep_str)
+    fn = find_kdb_file_by_symbol(symbol, kdb_path=kdb_hist_path)
 
     ds=[]
     de=[]
@@ -1318,4 +1303,97 @@ def ingest_all_kdb_repo(kdb_path='/cygdrive/c/zfu/data/kdb', repo_path='/cygdriv
             tdbad_arr.append(bd)
             np.savez_compressed('kdb_dump.npz', sym_arr=sym_arr, td_arr=td_arr, tdbad_arr=tdbad_arr)
 
+
+def KDB_first_contract_day_fixes(symbol, kdb_path='./kdb', repo_path='./repo', bar_sec=5) :
+    """
+    So the last days of a contract has little trades. 
+    The first day of a contract couldn't over-write due to 
+    over-night lr. 
+    This is to get in the first days of a bar file, if that
+    day appear as the last day of previous contract
+    """
+    dbar = repo.RepoDailyBar(symbol, repo_path=repo_path)
+    fn = find_kdb_file_by_symbol(symbol, kdb_path=kdb_path)
+    # this is everyfile I have, pop a day dict
+    day_dict={}
+    for f in fn :
+        f0 = f.split('/')[-1]
+        d1=f0.split('_')[1]
+        d2=f0.split('_')[2].split('.')[0]
+        tdi=l1.TradingDayIterator(d1)
+        day=tdi.yyyymmdd()
+        con = f0.split('_')[0][-2:]
+        con = con[-1]+con[0]
+        while day <= d2 :
+            # populate a day dict on contracts
+            try :
+                dd = day_dict[day]
+                if f not in dd['fa'] :
+                    dd['fa'].append(f)
+                    dd['cnt']+=1
+                    if con > dd['con'] :
+                        dd['con'] = con
+                        dd['fn']=f
+            except :
+                dd = {'cnt':1, 'con':con, 'fn':f, 'fa':[f]}
+            day_dict[day]= copy.deepcopy(dd)
+            tdi.next()
+            day=tdi.yyyymmdd()
+
+    run_day_dict(symbol, day_dict, dbar)
+    return day_dict
+
+def run_day_dict(symbol, day_dict, dbar) :
+    # reload all days with a cnt > 1
+    for d in day_dict.keys() :
+        dd=day_dict[d]
+        if dd['cnt'] > 1 :
+            print 'getting ', dd
+            run_day(symbol, d, dd['fn'], dbar)
+
+def run_day(symbol, d, fn, dbar, bar_sec=5) :
+    try :
+        b_,c_,bs_=dbar.load_day(d)
+        if len(b_)==0 or bs_!=bar_sec :
+            print d, ' not found in repo??? skipping'
+            return
+        b=bar_by_file(fn, symbol)
+        if len(b)==0:
+            return
+        ba, td, col = write_daily_bar(symbol,b,bar_sec=bar_sec,trade_day_given=d)
+        if d != td[0] :
+            print 'got NOTHGING on ', d, ' damn!'
+            return
+        # compare number of trades
+        ba = ba[0]
+        col=col[0]
+        vol= ba[:, repo.ci(col,repo.volc)]
+        vol0=b_[:, repo.ci(c_, repo.volc)]
+        print 'got ', np.sum(vol) , ' vesus ', np.sum(vol0), ' (trades)',
+        if np.sum(vol) <= np.sum(vol0) :
+            print ' NOT better, skipping!'
+            return
+        print ' TAKING it!'
+
+        # first non-zero lr
+        lr=ba[:,repo.ci(col,repo.lrc)]
+        ix = np.nonzero(lr!=0)[0][0]
+        if ix > 10 :
+            print ' filling initial ', ix, ' bars with repo '
+            lpx0 = b_[ix,repo.ci(c_,repo.lpxc)]
+            lpx =  ba[ix,repo.ci(col,repo.lpxc)]
+            pd = lpx-lpx0
+            b_[:ix,repo.ci(c_,repo.lpxc)]+=pd
+            b_[:ix,repo.ci(c_,repo.vwapc)]+=pd
+            ba[:ix,:]=b_[:ix,:]
+        else :
+            # get the first lr
+            ba[0,repo.ci(col,repo.lrc)]=b_[0,repo.ci(c_,repo.lrc)]
+
+        dbar.remove_day(d)
+        dbar.update([ba], [d], [col], bar_sec)
+
+    except :
+        print 'problem trying to use repo overnight lr!'
+        traceback.print_exc()
 
