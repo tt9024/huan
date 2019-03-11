@@ -117,7 +117,8 @@ def bar_by_file_future_trd_day(symbol, day1, day2, kdb_path, fc=None, nc=False) 
                 if fc0 != bfn_contract :
                     print 'WARNING!  bar file contract is not front contract on ', day1, l1.FC(symbol, day1), bfn_contract
 
-        fn0,_,_ = kdb_path_by_symbol(kdb_path, symbol)+'/trd/*'+day1+'*'
+        fn0,_,_ = kdb_path_by_symbol(kdb_path, symbol)
+        fn0 += '/trd/*'+day1+'*'
         fn = glob.glob(fn0)
         # filter out the spread files from fn
         for f0 in fn :
@@ -299,7 +300,8 @@ def find_patch_days(symarr,sday,eday,kdb_path='./kdb', check_col='px') :
     """
     fza={}
     for symbol in symarr :
-        fn0,_,_ = kdb_path_by_symbol(kdb_path, symbol)+'/trd/*_trd*'
+        fn0,_,_ = kdb_path_by_symbol(kdb_path, symbol)
+        fn0+='/trd/*_trd*'
         fa=glob.glob(fn0)
         fza[symbol]={'d':[],'f':[]}
         for i, fn in enumerate(fa) :
@@ -879,8 +881,6 @@ def write_daily_bar(symbol,bar,bar_sec=5,old_cl_repo=None, trade_day_given=None)
     day_end=datetime.datetime.fromtimestamp(bar[-1,0]).strftime('%Y%m%d')
     # deciding on the trading days
     if trade_day_given is not None:
-        assert trade_day_given >= day_start
-        assert trade_day_given <= day_end
         trd_day_start=trade_day_given
         trd_day_end=trade_day_given
     else :
@@ -1304,7 +1304,19 @@ def ingest_all_kdb_repo(kdb_path='/cygdrive/c/zfu/data/kdb', repo_path='/cygdriv
             np.savez_compressed('kdb_dump.npz', sym_arr=sym_arr, td_arr=td_arr, tdbad_arr=tdbad_arr)
 
 
-def KDB_first_contract_day_fixes(symbol, kdb_path='./kdb', repo_path='./repo', bar_sec=5) :
+
+########################################################################
+#
+# PATCHING FOR THE FOLLOWING PROBLEMS
+#
+# 1. OUT contracts are in repo during roll time. 
+#    Need to switch to IN contract, or a contracts with more trades
+# 2. Missing days from KDB bar, could be filled from CME or trd repos
+# 
+##########################################################################
+
+
+def in_out_day_dict(symbol, kdb_path='./kdb') :
     """
     So the last days of a contract has little trades. 
     The first day of a contract couldn't over-write due to 
@@ -1312,58 +1324,73 @@ def KDB_first_contract_day_fixes(symbol, kdb_path='./kdb', repo_path='./repo', b
     This is to get in the first days of a bar file, if that
     day appear as the last day of previous contract
     """
-    dbar = repo.RepoDailyBar(symbol, repo_path=repo_path)
     fn = find_kdb_file_by_symbol(symbol, kdb_path=kdb_path)
     # this is everyfile I have, pop a day dict
     day_dict={}
-    for f in fn :
-        f0 = f.split('/')[-1]
-        d1=f0.split('_')[1]
-        d2=f0.split('_')[2].split('.')[0]
-        tdi=l1.TradingDayIterator(d1)
-        day=tdi.yyyymmdd()
-        con = f0.split('_')[0][-2:]
-        con = con[-1]+con[0]
-        while day <= d2 :
-            # populate a day dict on contracts
-            try :
-                dd = day_dict[day]
-                if f not in dd['fa'] :
-                    dd['fa'].append(f)
-                    dd['cnt']+=1
-                    if con > dd['con'] :
-                        dd['con'] = con
-                        dd['fn']=f
-            except :
-                dd = {'cnt':1, 'con':con, 'fn':f, 'fa':[f]}
-            day_dict[day]= copy.deepcopy(dd)
-            tdi.next()
+    try :
+        for f in fn :
+            f0 = f.split('/')[-1]
+            d1=f0.split('_')[1]
+            d2=f0.split('_')[2].split('.')[0]
+            tdi=l1.TradingDayIterator(d1)
             day=tdi.yyyymmdd()
+            con = f0.split('_')[0][-2:]
+            con = con[-1]+con[0]
+            # there never be a shortage of traps: 0Z > 9Z
+            if con[0]=='0' :
+                con='Z'+con[1] # The biggest!
+            while day <= d2 :
+                # populate a day dict on contracts
+                try :
+                    dd = day_dict[day]
+                    if f not in dd['fa'] :
+                        dd['fa'].append(f)
+                        dd['cnt']+=1
+                        if con > dd['con'] :
+                            dd['con'] = con
+                            dd['fn']=f
+                except :
+                    dd = {'cnt':1, 'con':con, 'fn':f, 'fa':[f]}
+                day_dict[day]= copy.deepcopy(dd)
+                tdi.next()
+                day=tdi.yyyymmdd()
+    except:
+        traceback.print_exc()
+        raise RuntimeError('runtime error for fixing first contract stuff! See errors before, I am sure there must be plenty.')
 
-    run_day_dict(symbol, day_dict, dbar)
     return day_dict
 
-def run_day_dict(symbol, day_dict, dbar) :
+def run_inout_dict(symbol, day_dict, dbar_update, dbar_read=None) :
     # reload all days with a cnt > 1
     for d in day_dict.keys() :
         dd=day_dict[d]
         if dd['cnt'] > 1 :
             print 'getting ', dd
-            run_day(symbol, d, dd['fn'], dbar)
+            try :
+                run_inout(symbol, d, dd['fn'], dbar_update, dbar_read=dbar_read)
+            except KeyboardInterrupt as e :
+                raise e
+            except Exception as e:
+                print 'problem with ', d, ' ' , dd, ' continue!'
 
-def run_day(symbol, d, fn, dbar, bar_sec=5) :
+def run_inout(symbol, d, fn, dbar, bar_sec=5, dbar_read=None) :
     try :
-        b_,c_,bs_=dbar.load_day(d)
-        if len(b_)==0 or bs_!=bar_sec :
-            print d, ' not found in repo??? skipping'
-            return
+        if dbar_read is None :
+            dbar_read = dbar
         b=bar_by_file(fn, symbol)
         if len(b)==0:
             return
         ba, td, col = write_daily_bar(symbol,b,bar_sec=bar_sec,trade_day_given=d)
-        if d != td[0] :
+        if len(ba)==0 or d != td[0] or len(ba[0])==0:
             print 'got NOTHGING on ', d, ' damn!'
             return
+        b_,c_,bs_=dbar_read.load_day(d)
+        if len(b_)==0 : 
+            print d, ' not found in repo??? use bar!'
+            dbar.update(ba, td, col, bar_sec)
+            return
+        assert bs_ == bar_sec, 'bar_sec mismatch?? What happened? day=%s, fn=%s, bs=%d'%(d,fn,bs_)
+
         # compare number of trades
         ba = ba[0]
         col=col[0]
@@ -1386,6 +1413,11 @@ def run_day(symbol, d, fn, dbar, bar_sec=5) :
             b_[:ix,repo.ci(c_,repo.lpxc)]+=pd
             b_[:ix,repo.ci(c_,repo.vwapc)]+=pd
             ba[:ix,:]=b_[:ix,:]
+
+            # redo the lr
+            lpx =  ba[:,repo.ci(col,repo.lpxc)]
+            lr=np.log(lpx[1:])-np.log(lpx[:-1])
+            ba[1:,repo.ci(col,repo.lrc)]=lr
         else :
             # get the first lr
             ba[0,repo.ci(col,repo.lrc)]=b_[0,repo.ci(c_,repo.lrc)]
@@ -1393,7 +1425,70 @@ def run_day(symbol, d, fn, dbar, bar_sec=5) :
         dbar.remove_day(d)
         dbar.update([ba], [d], [col], bar_sec)
 
-    except :
+    except Exception as e :
         print 'problem trying to use repo overnight lr!'
         traceback.print_exc()
+        raise RuntimeError(e)
+
+def fill_day_dict(sym_arr, repo_path_arr, sday='19980101', eday='20180214') :
+    """
+    For each dd, fill in volume and sum of abs(lr) from dbar_read
+    """
+    sym_dict={}
+    for symbol in sym_arr :
+        day_dict={}
+        dbar_arr=[]
+        for rp in repo_path_arr :
+            dbar_arr.append(repo.RepoDailyBar(symbol, repo_path=rp))
+
+        tdi=l1.TradingDayIterator(sday)
+        d=tdi.yyyymmdd()
+        while d <= eday :
+            day_dict[d]={}
+            for dbar_read in dbar_arr :
+                bdict={}
+                try :
+                    b,c,bs=dbar_read.load_day(d)
+                    bdict['totvol']=np.sum(np.abs(b[:,repo.ci(c,repo.volc)]))
+                    bdict['totlr']=np.sum(np.abs(b[:,repo.ci(c,repo.lrc)]))
+                except :
+                    bdict['totvol']=0
+                    bdict['totlr']=0
+                day_dict[d][dbar_read.path]=copy.deepcopy(bdict)
+        sym_dict[symbol]=copy.deepcopy(day_dict)
+    return sym_dict
+
+def fix_kdb_20171016_20171017(sym_arr=kdb_future_symbols) :
+    repo_path_write='./repo'
+    repo_path_read_arr=['./repo_cme','./repo_trd']
+    day_arr=['20171016','20171017']
+    bar_sec=5
+    repo.UpdateFromRepo(sym_arr, day_arr, repo_path_write, repo_path_read_arr, bar_sec, keep_overnight=True)
+
+def find_missing_day(sym_dict) :
+    """
+    sym_dict = fill_day_dict(sym_arr=kdb_future_symbols, repo_path_arr=['./repo'])
+    """
+    repo_path_write='./repo'
+    repo_path_read_arr=['./repo_cme','./repo_trd']
+    bar_sec=5
+    for symbol in sym_dict.keys() :
+        day_arr=[]
+        day_dict=sym_dict[symbol]
+        for d in day_dict.keys() :
+            if day_dict[d][repo_path_write]['totlr'] == 0 :
+                day_arr.append(d)
+        if len(day_arr) > 0 :
+            repo.UpdateFromRepo([symbol], day_arr, repo_path_write, repo_path_read_arr, bar_sec, keep_overnight=False)
+
+def fix_inout(symarr=kdb_future_symbols, repo_update_path='./repo', repo_read_path='./back_repo/repo_kdb') :
+    sym_dict={}
+    for sym in kdb_future_symbols :
+        print 'Fix inout for ', sym
+        dd=in_out_day_dict(sym)
+        sym_dict[sym]=copy.deepcopy(dd)
+        dw=repo.RepoDailyBar(sym, repo_path=repo_update_path)
+        dr=repo.RepoDailyBar(sym, repo_path=repo_read_path)
+        run_inout_dict(sym, dd, dw, dr)
+    return sym_dict
 

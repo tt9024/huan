@@ -573,9 +573,16 @@ class RepoDailyBar :
             print 'running at a wrong directory? ', self.idxfn, ' not found!'
             raise ValueError('file not found')
 
-        os.system('mkdir -p ' + self.path+'/daily/'+day)
-        np.savez_compressed(bfn, bar=bar)
-        np.savez_compressed(self.idxfn, idx=self.idx)
+        try :
+            os.system('mkdir -p ' + self.path+'/daily/'+day)
+            np.savez_compressed(bfn, bar=bar)
+            np.savez_compressed(self.idxfn, idx=self.idx)
+            # copy to a backup file once done, for some strange problem in index
+            if os.stat(self.idxfn).st_size > 1024 :
+                os.system('cp '+self.idxfn+' '+self.idxfn+'_bk')
+        except :
+            traceback.print_exc()
+            print 'problem dumping bar file or idx file on ', day, ' ', self.path
 
     def _get_totalbars(self, bar_sec) :
         return  (self.eh - self.sh) * (3600 / bar_sec)
@@ -738,6 +745,50 @@ class RepoDailyBar :
         df.fillna(method='ffill',inplace=True)
         df.fillna(method='bfill',inplace=True)
 
+
+def UpdateFromRepo(sym_arr, day_arr, repo_path_write, repo_path_read_arr, bar_sec, keep_overnight=True) :
+    """
+    copy all contents from read to write, with target bar_sec.  keep_overnight to save the original lr0
+    repo_path_read_arr is a prioritized array for reading non-empty days.
+    """
+    for sym in sym_arr :
+        try :
+            dbar=repo.RepoDailyBar(sym, repo_path=repo_path_write)
+        except :
+            dbar=repo.RepoDailyBar(sym, repo_path=repo_path_write, create=True)
+
+        dbar_read=[]
+        for path in repo_path_read_arr :
+            try :
+                dbar_read.append(repo.RepoDailyBar(sym, repo_path=repo_path_read))
+            except :
+                print path, ' excluded for ', sym
+        for d in day_arr :
+            print 'copying ', sym, ' on ', d
+            b=[]
+            for dr in dbar_read :
+                b, c, bs = dr.load_day(d)
+                if len(b) > 0 :
+                    break
+                print d, ' not found from ', dr.path
+            if len(b)==0 :
+                print d, ' not found from ALL Sources, skipping...'
+                continue
+
+            if bs != bar_sec :
+                b = dbar_read._scale(d,b,c,bs,c,bar_sec)
+
+            if keep_overnight :
+                b0, c0, bs0 = dbar.load_day(d)
+                if len(b0) > 0 :
+                    # keep the overnight lr unchanged 
+                    print 'keep over-night lr %f, replacing %f'%(b[0,repo.ci(c,repo.lrc)], b0[0,repo.ci(c0,repo.lrc)])
+                    b[0,repo.ci(c,repo.lrc)]=b0[0,repo.ci(c0,repo.lrc)]
+                    dbar.remove_day(d)
+                else :
+                    print d, ' not found from Dest ', repo_path_write, ' overnight not adjusted.'
+            
+            dbar.update([b],[c],[d],bar_sec)
 
 ################################################
 #  Some test procedures for verifying repo data#
