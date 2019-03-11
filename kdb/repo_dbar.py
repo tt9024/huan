@@ -500,6 +500,9 @@ class RepoDailyBar :
             try :
                 bfn = self.path+'/daily/'+day+'/bar.npz'
                 bar = np.load(bfn)['bar']
+            except KeyboardInterrupt as e :
+                print 'Keyboard interrupt!'
+                raise e
             except :
                 print bfn+' not found but is in the repo index'
                 self.remove_day(day)
@@ -580,6 +583,8 @@ class RepoDailyBar :
             # copy to a backup file once done, for some strange problem in index
             if os.stat(self.idxfn).st_size > 1024 :
                 os.system('cp '+self.idxfn+' '+self.idxfn+'_bk')
+        except KeyboardInterrupt as e :
+            raise e
         except :
             traceback.print_exc()
             print 'problem dumping bar file or idx file on ', day, ' ', self.path

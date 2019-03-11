@@ -1436,10 +1436,17 @@ def fill_day_dict(sym_arr, repo_path_arr, sday='19980101', eday='20180214') :
     """
     sym_dict={}
     for symbol in sym_arr :
+        print 'finding ', symbol
         day_dict={}
         dbar_arr=[]
         for rp in repo_path_arr :
-            dbar_arr.append(repo.RepoDailyBar(symbol, repo_path=rp))
+            try :
+                dbar_arr.append(repo.RepoDailyBar(symbol, repo_path=rp))
+            except :
+                continue
+        if len(dbar_arr) == 0 :
+            print ' nothing found for symbol ', symbol, '!!!'
+            continue
 
         tdi=l1.TradingDayIterator(sday)
         d=tdi.yyyymmdd()
@@ -1451,10 +1458,14 @@ def fill_day_dict(sym_arr, repo_path_arr, sday='19980101', eday='20180214') :
                     b,c,bs=dbar_read.load_day(d)
                     bdict['totvol']=np.sum(np.abs(b[:,repo.ci(c,repo.volc)]))
                     bdict['totlr']=np.sum(np.abs(b[:,repo.ci(c,repo.lrc)]))
+                except KeyboardInterrupt as e :
+                    raise e
                 except :
                     bdict['totvol']=0
                     bdict['totlr']=0
                 day_dict[d][dbar_read.path]=copy.deepcopy(bdict)
+            tdi.next()
+            d=tdi.yyyymmdd()
         sym_dict[symbol]=copy.deepcopy(day_dict)
     return sym_dict
 
