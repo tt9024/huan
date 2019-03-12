@@ -1474,10 +1474,34 @@ def fix_kdb_20171016_20171017(sym_arr=kdb_future_symbols) :
     repo_path_read_arr=['./repo_cme','./repo_trd']
     day_arr=['20171016','20171017']
     bar_sec=5
-    repo.UpdateFromRepo(sym_arr, day_arr, repo_path_write, repo_path_read_arr, bar_sec, keep_overnight=True)
+    repo.UpdateFromRepo(sym_arr, day_arr, repo_path_write, repo_path_read_arr, bar_sec, keep_overnight='onzero')
 
-def find_missing_day(sym_dict) :
+def update_from_cme(sym_dict) :
     """
+    Since KDB bar's trade is front+back, so if it's trade volume is less than cme's front, then
+    update with cme on the day
+    should_upd_func = repo.trd_cmp_func compares the trade vol
+    """
+    repo_path_write='./repo'
+    repo_path_read='./repo_cme'
+    bar_sec=5
+    for symbol in sym_dict.keys() :
+        dd = sym_dict[symbol]
+        days=[]
+        for d in dd.keys() :
+            for rp in dd[d].keys():
+                if repo_path_read not in rp :
+                    continue
+                if dd[d][rp]['totvol']>0 :
+                    days.append(d)
+                    break
+        if len(days) > 0 :
+            repo.UpdateFromRepo([symbol], days, repo_path_write, [repo_path_read], bar_sec, keep_overnight='onzero',\
+                                should_upd_func=repo.trd_cmp_func)
+
+def fill_missing_kdb(sym_dict) :
+    """
+    getting from the 
     sym_dict = fill_day_dict(sym_arr=kdb_future_symbols, repo_path_arr=['./repo'])
     """
     repo_path_write='./repo'
@@ -1487,10 +1511,11 @@ def find_missing_day(sym_dict) :
         day_arr=[]
         day_dict=sym_dict[symbol]
         for d in day_dict.keys() :
-            if day_dict[d][repo_path_write]['totlr'] == 0 :
+            rp = repo_path_write + '/' + symbol
+            if day_dict[d][rp]['totlr'] == 0 :
                 day_arr.append(d)
         if len(day_arr) > 0 :
-            repo.UpdateFromRepo([symbol], day_arr, repo_path_write, repo_path_read_arr, bar_sec, keep_overnight=False)
+            repo.UpdateFromRepo([symbol], day_arr, repo_path_write, repo_path_read_arr, bar_sec, keep_overnight='no')
 
 def fix_inout(symarr=kdb_future_symbols, repo_update_path='./repo', repo_read_path='./back_repo/repo_kdb') :
     sym_dict={}

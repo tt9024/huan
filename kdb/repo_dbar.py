@@ -751,10 +751,42 @@ class RepoDailyBar :
         df.fillna(method='bfill',inplace=True)
 
 
-def UpdateFromRepo(sym_arr, day_arr, repo_path_write, repo_path_read_arr, bar_sec, keep_overnight=True) :
+def trd_cmp_func(b,c,b0,c0) :
+    try :
+        v1 = np.sum(b[:,ci(c,volc)])
+    except :
+        v1 = 0
+    try :
+        v2 = np.sum(b0[:,ci(c0,volc)])
+    except :
+        v2 = 0
+
+    return v1>v2
+
+def lr_cmp_func(b,c,b0,c0) :
+    try :
+        v1 = np.sum(np.abs(b[:,ci(c,lrc)]))
+    except :
+        v1 = 0
+    try :
+        v2 = np.sum(np.abs(b0[:,ci(c0,lrc)]))
+    except :
+        v2 = 0
+    return v1>v2
+
+def UpdateFromRepo(sym_arr, day_arr, repo_path_write, repo_path_read_arr, bar_sec, keep_overnight='onzero', should_upd_func=None) :
     """
     copy all contents from read to write, with target bar_sec.  keep_overnight to save the original lr0
     repo_path_read_arr is a prioritized array for reading non-empty days.
+
+    keep_overnight=['yes'|'onzero'|'no']
+       'ues' : always keep original (write_repo)'s overnight lr
+       'onzero': take read repo's overnight lr if its not zero, otherwise, keep 
+       'no'  : always take read repo's overnight lr
+
+    should_upd_func is a function 
+        should_upd_func(b,c,b0,c0) ==> b,c from read repo, b0, c0 from write repo
+        return: true/false
     """
     for sym in sym_arr :
         try :
@@ -783,15 +815,24 @@ def UpdateFromRepo(sym_arr, day_arr, repo_path_write, repo_path_read_arr, bar_se
             if bs != bar_sec :
                 b = dr._scale(d,b,c,bs,c,bar_sec)
 
-            if keep_overnight :
-                b0, c0, bs0 = dbar.load_day(d)
-                if len(b0) > 0 :
-                    # keep the overnight lr unchanged 
-                    print 'keep over-night lr %f, replacing %f'%(b[0,ci(c,lrc)], b0[0,ci(c0,lrc)])
-                    b[0,ci(c,lrc)]=b0[0,ci(c0,lrc)]
-                    dbar.remove_day(d)
-                else :
-                    print d, ' not found from Dest ', repo_path_write, ' overnight not adjusted.'
+            b0, c0, bs0 = dbar.load_day(d)
+            if should_upd_func is not None and not should_upd_func(b,c,b0,c0) :
+                print 'should_upd_func FALSE from ', dr.path
+                continue
+            if len(b0) > 0 :
+                if keep_overnight in ['yes','onzero'] :
+                    lr0 = b0[0,ci(c0,lrc)]
+                    lr  = b[0,ci(c,lrc)]
+                    if keep_overnight == 'onzero' and lr != 0 :
+                        print 'using new lr ', lr, ' replacing ', lr0
+                        lr0 = lr
+                    else :
+                        # keep the overnight lr unchanged 
+                        print 'keep over-night lr %f, ignoring %f'%(lr0, lr)
+                    b[0,ci(c,lrc)]=lr0
+                dbar.remove_day(d)
+            else :
+                print d, ' not found from Dest ', repo_path_write, ' overnight not adjusted.'
             
             dbar.update([b],[d],[c],bar_sec)
 
