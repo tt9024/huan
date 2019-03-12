@@ -758,14 +758,14 @@ def UpdateFromRepo(sym_arr, day_arr, repo_path_write, repo_path_read_arr, bar_se
     """
     for sym in sym_arr :
         try :
-            dbar=repo.RepoDailyBar(sym, repo_path=repo_path_write)
+            dbar=RepoDailyBar(sym, repo_path=repo_path_write)
         except :
-            dbar=repo.RepoDailyBar(sym, repo_path=repo_path_write, create=True)
+            dbar=RepoDailyBar(sym, repo_path=repo_path_write, create=True)
 
         dbar_read=[]
         for path in repo_path_read_arr :
             try :
-                dbar_read.append(repo.RepoDailyBar(sym, repo_path=repo_path_read))
+                dbar_read.append(RepoDailyBar(sym, repo_path=path))
             except :
                 print path, ' excluded for ', sym
         for d in day_arr :
@@ -773,7 +773,7 @@ def UpdateFromRepo(sym_arr, day_arr, repo_path_write, repo_path_read_arr, bar_se
             b=[]
             for dr in dbar_read :
                 b, c, bs = dr.load_day(d)
-                if len(b) > 0 :
+                if len(b) > 0 and np.sum(np.abs(b[:,ci(c,lrc)])) > 0 :
                     break
                 print d, ' not found from ', dr.path
             if len(b)==0 :
@@ -781,19 +781,19 @@ def UpdateFromRepo(sym_arr, day_arr, repo_path_write, repo_path_read_arr, bar_se
                 continue
 
             if bs != bar_sec :
-                b = dbar_read._scale(d,b,c,bs,c,bar_sec)
+                b = dr._scale(d,b,c,bs,c,bar_sec)
 
             if keep_overnight :
                 b0, c0, bs0 = dbar.load_day(d)
                 if len(b0) > 0 :
                     # keep the overnight lr unchanged 
-                    print 'keep over-night lr %f, replacing %f'%(b[0,repo.ci(c,repo.lrc)], b0[0,repo.ci(c0,repo.lrc)])
-                    b[0,repo.ci(c,repo.lrc)]=b0[0,repo.ci(c0,repo.lrc)]
+                    print 'keep over-night lr %f, replacing %f'%(b[0,ci(c,lrc)], b0[0,ci(c0,lrc)])
+                    b[0,ci(c,lrc)]=b0[0,ci(c0,lrc)]
                     dbar.remove_day(d)
                 else :
                     print d, ' not found from Dest ', repo_path_write, ' overnight not adjusted.'
             
-            dbar.update([b],[c],[d],bar_sec)
+            dbar.update([b],[d],[c],bar_sec)
 
 ################################################
 #  Some test procedures for verifying repo data#
