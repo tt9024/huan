@@ -1362,24 +1362,38 @@ def in_out_day_dict(symbol, kdb_path='./kdb') :
 
 def run_inout_dict(symbol, day_dict, dbar_update, dbar_read=None) :
     # reload all days with a cnt > 1
+    fn_bar_dict={}
     for d in day_dict.keys() :
         dd=day_dict[d]
         if dd['cnt'] > 1 :
-            print 'getting ', dd
-            try :
-                run_inout(symbol, d, dd['fn'], dbar_update, dbar_read=dbar_read)
-            except KeyboardInterrupt as e :
-                raise e
-            except Exception as e:
-                print 'problem with ', d, ' ' , dd, ' continue!'
+            fn = dd['fn']
+            if fn in fn_bar_dict.keys() :
+                fn_bar_dict[fn].append(d)
+            else :
+                fn_bar_dict[fn]=[d]
+                
+    for fn in fn_bar_dict.keys() :
+        try :
+            print 'getting bar for ', fn
+            b = bar_by_file(fn, symbol)
+            if len(b) == 0 :
+                print 'NOTHING from ', fn, ' !!!!'
+                continue
 
-def run_inout(symbol, d, fn, dbar, bar_sec=5, dbar_read=None) :
+            for d in fn_bar_dict[fn] :
+                run_inout(b, symbol, d, fn, dbar_update, dbar_read=dbar_read)
+        except KeyboardInterrupt as e :
+            raise e
+        except Exception as e:
+            traceback.print_exc()
+            print 'problem with ', d, ' ' , dd, ' continue!'
+
+def run_inout(b, symbol, d, fn, dbar, bar_sec=5, dbar_read=None) :
     try :
-        if dbar_read is None :
-            dbar_read = dbar
-        b=bar_by_file(fn, symbol)
         if len(b)==0:
             return
+        if dbar_read is None :
+            dbar_read = dbar
         ba, td, col = write_daily_bar(symbol,b,bar_sec=bar_sec,trade_day_given=d)
         if len(ba)==0 or d != td[0] or len(ba[0])==0:
             print 'got NOTHGING on ', d, ' damn!'
@@ -1428,7 +1442,6 @@ def run_inout(symbol, d, fn, dbar, bar_sec=5, dbar_read=None) :
     except Exception as e :
         print 'problem trying to use repo overnight lr!'
         traceback.print_exc()
-        raise RuntimeError(e)
 
 def fill_day_dict(sym_arr, repo_path_arr, sday='19980101', eday='20180214') :
     """
@@ -1517,9 +1530,27 @@ def fill_missing_kdb(sym_dict) :
         if len(day_arr) > 0 :
             repo.UpdateFromRepo([symbol], day_arr, repo_path_write, repo_path_read_arr, bar_sec, keep_overnight='no')
 
+def fix_lr_nan(sym_dict) :
+    """
+    same as above, but due to nan lr from repo_trd, now I have to deal with that.
+    """
+    repo_path='./repo'
+    for symbol in sym_dict.keys() :
+        print 'checking nan lr for ', symbol
+        day_arr=[]
+        day_dict=sym_dict[symbol]
+        for d in day_dict.keys() :
+            rp = repo_path+'/' + symbol
+            if day_dict[d][rp]['totlr'] == 0 :
+                day_arr.append(d)
+        if len(day_arr) > 0 :
+            print 'got ', len(day_arr), ' days to check'
+            dbar=repo.RepoDailyBar(symbol, repo_path=repo_path)
+            repo.fix_lr_nan(dbar, day_arr)
+
 def fix_inout(symarr=kdb_future_symbols, repo_update_path='./repo', repo_read_path='./back_repo/repo_kdb') :
     sym_dict={}
-    for sym in kdb_future_symbols :
+    for sym in symarr :
         print 'Fix inout for ', sym
         dd=in_out_day_dict(sym)
         sym_dict[sym]=copy.deepcopy(dd)
@@ -1527,4 +1558,5 @@ def fix_inout(symarr=kdb_future_symbols, repo_update_path='./repo', repo_read_pa
         dr=repo.RepoDailyBar(sym, repo_path=repo_read_path)
         run_inout_dict(sym, dd, dw, dr)
     return sym_dict
+
 

@@ -751,6 +751,27 @@ class RepoDailyBar :
         df.fillna(method='bfill',inplace=True)
 
 
+
+#################################################
+# Some utility functions
+#################################################
+def fix_lr_nan(dbar, day_arr) :
+    for d in day_arr :
+        b, c, bs = dbar.load_day(d)
+        if len(b) == 0 :
+            continue
+        # filling in the lr
+        ixn=np.nonzero(np.isfinite(b[:,ci(c,lrc)])==False)[0]
+        if len(ixn) > 0 :
+            print 'fixing ', len(ixn), ' nan lr bars'
+            b[ixn, ci(c,lrc)]=0
+            # recalc everything
+            lpx = np.log(b[:,ci(c,lpxc)])
+            b[1:,ci(c,lrc)]=lpx[1:]-lpx[:-1]
+            dbar.remove_day(d)
+            dbar.update([b],[d],[c],bs)
+
+
 def trd_cmp_func(b,c,b0,c0) :
     try :
         v1 = np.sum(b[:,ci(c,volc)])
@@ -835,6 +856,7 @@ def UpdateFromRepo(sym_arr, day_arr, repo_path_write, repo_path_read_arr, bar_se
                 print d, ' not found from Dest ', repo_path_write, ' overnight not adjusted.'
             
             dbar.update([b],[d],[c],bar_sec)
+            fix_lr_nan(dbar, [d])
 
 ################################################
 #  Some test procedures for verifying repo data#
