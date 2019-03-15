@@ -771,6 +771,21 @@ def fix_lr_nan(dbar, day_arr) :
             dbar.remove_day(d)
             dbar.update([b],[d],[c],bs)
 
+def fix_lpx_from_lr(dbar, day, lpx0=None, dbar_ref=None) :
+        b, c, bs = dbar.load_day(day)
+        if len(b) == 0 :
+            return
+        # regenerate lpx based on lr
+        lr = b[:, ci(c, lrc)]
+        lpx0_ = b[0, ci(c,lpxc)]
+        if lpx0 is None :
+            b0,c0,_=dbar_ref.load_day(day)
+            lpx0=b0[0,ci(c0,lpxc)]
+        if min(lpx0_,lpx0)/max(lpx0_,lpx0)<0.5 :
+            print 'updating lpx using lr for ', dbar.symbol, ' on ', day
+            b[:,ci(c,lpxc)]=np.r_[lpx0, np.exp(np.log(lpx0)+np.cumsum(lr[1:]))]
+            dbar.remove_day(day)
+            dbar.update([b],[day],[c],bs)
 
 def trd_cmp_func(b,c,b0,c0) :
     try :

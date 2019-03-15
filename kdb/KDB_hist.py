@@ -1559,4 +1559,28 @@ def fix_inout(symarr=kdb_future_symbols, repo_update_path='./repo', repo_read_pa
         run_inout_dict(sym, dd, dw, dr)
     return sym_dict
 
+def fix_lpx_cme_fx() :
+    """
+    cme's 6J and 6M price inverted from KDB. Need to fix
+    Also some KDB days, when getting from CME, have to be fixed
+    """
+    target_repo = ['./repo_cme','./repo']
+    ref_repo = './back_repo/repo_kdb'
+
+    sday='20170601'
+    eday='20171231'
+
+    for symbol in ['6J','6M'] :
+        dbar0=repo.RepoDailyBar(symbol, repo_path=ref_repo)
+        print symbol, ' checking prices...'
+        for repo_path in target_repo :
+            dbar=repo.RepoDailyBar(symbol, repo_path=repo_path)
+            print dbar.path
+            tdi = l1.TradingDayIterator(sday)
+            d = tdi.yyyymmdd()
+            while d <= eday :
+                print 'checking ', d
+                repo.fix_lpx_from_lr(dbar, d, dbar_ref=dbar0)
+                tdi.next()
+                d=tdi.yyyymmdd()
 
