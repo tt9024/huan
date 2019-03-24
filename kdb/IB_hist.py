@@ -7,6 +7,7 @@ import pdb
 import glob
 import l1
 import repo_dbar as repo
+import copy
 
 # this is more or less same with KDB_hist.py, with 
 # differences are 
@@ -66,15 +67,17 @@ def write_daily_bar(symbol, bar, bar_sec=5, is_front=True, last_close_px=None, g
             if x+1>=bar.shape[0] :
                 print 'no bars found after the start utc of ', day_start
             else :
-                print 'start up utc (%d) 5 minutes later than start utc (%d) on %s'%(bar[x+1,0], utc_s, day_start)
+                print 'start up utc (%d) more than 5 minutes later than start utc (%d) on %s'%(bar[x+1,0], utc_s, day_start)
                 print 'initializing start up last_close_px deferred'
         else :
             if x == 0 :
-                last_close_px = bar[0, 2]
-                print 'last close price set as the first bar open px, this should use previous contract', datetime.datetime.fromtimestamp(bar[0,0]), datetime.datetime.fromtimestamp(bar[1,0])
+                #last_close_px = bar[0, 2]
+                #print 'last close price set as the first bar open px, this should use previous contract', datetime.datetime.fromtimestamp(bar[0,0]), datetime.datetime.fromtimestamp(bar[1,0])
+                last_close_px = bar[0, 5]
+                print 'lost last close price, set as the first bar close px'
             else :
                 last_close_px=bar[x,5]
-                print 'last close price set to previous close at ', datetime.datetime.fromtimestamp(bar[x,0]), ' px: ', last_close_px
+                print 'last close price set to close px of bar ', datetime.datetime.fromtimestamp(bar[x,0]), ' px: ', last_close_px
 
         print 'GOT last close px ', last_close_px
     else :
@@ -120,8 +123,8 @@ def write_daily_bar(symbol, bar, bar_sec=5, is_front=True, last_close_px=None, g
         # a good threshold for missing/bad day
         bar_good = True
         if j-i<N*0.90 :
-            if symbol in ['LE','HE'] :
-                bar_good = (j-i)<N*0.75
+            if symbol in ['LE','HE'] or l1.venue_by_symbol(symbol)=='IDX' :
+                bar_good = (j-i)>N*0.75
             else :
                 bar_good=False
 
@@ -304,29 +307,65 @@ def clip_idx(utc, symbol, start_day, end_day) :
     ix1 = np.searchsorted(utc, utc1+0.1)
     return ix0, ix1
 
+def get_gzip_filename(fn) :
+    """
+    get either fn or fn.gz depending on which one
+    has non-zero size
+    """
+    if l1.get_file_size(fn)<10 :
+        if fn[-3:] != '.gz' :
+            return fn+'.gz'
+        return fn[:-3]
+    return fn
+
 def get_trd (fntd) :
-    if l1.get_file_size(fntd+'.gz')>100 :
-        os.system('gunzip ' + fntd + '.gz')
+    """
+    need to work with both .csv.gz or .csv format
+    All hist file is .gz.  So have to add .gz 
+    if not yet
+    """
     try :
-        print 'reading trd ', fntd
-        bar_trd=np.genfromtxt(fntd, delimiter=',',usecols=[0,1,2,3,4,5,6,7]) #,dtype=[('utc','i8'),('open','<f8'),('high','<f8'),('low','<f8'),('close','<f8'),('vol','i8'),('cnt','i8'),('wap','<f8')])
-        os.system('gzip -f ' + fntd)
+        fn=get_gzip_filename(fntd)
+        print 'reading trd ', fntd, fn
+        bar_trd=np.genfromtxt(fn, delimiter=',',usecols=[0,1,2,3,4,5,6,7]) #,dtype=[('utc','i8'),('open','<f8'),('high','<f8'),('low','<f8'),('close','<f8'),('vol','i8'),('cnt','i8'),('wap','<f8')])
     except :
-        print 'no trade for ', fntd
+        print 'no trade for ', fn
         bar_trd = []
     return bar_trd
 
 def get_qt(fnqt) :
-    if l1.get_file_size(fnqt+'.gz')>100 :
-        os.system('gunzip ' + fnqt + '.gz')
     try :
-        print 'reading quote ', fnqt
-        bar_qt=np.genfromtxt(fnqt, delimiter=',',usecols=[0,1,2,3,4]) #, dtype=[('utc','i8'),('open','<f8'),('high','<f8'),('low','<f8'),('close','<f8')])
-        os.system('gzip -f ' + fnqt)
+        fn=get_gzip_filename(fnqt)
+        print 'reading quote ', fnqt, fn
+        bar_qt=np.genfromtxt(fn, delimiter=',',usecols=[0,1,2,3,4]) #, dtype=[('utc','i8'),('open','<f8'),('high','<f8'),('low','<f8'),('close','<f8')])
     except :
-        print 'no quotes for ', fnqt
+        print 'no quotes for ', fn
         bar_qt = []
     return bar_qt
+
+def bar_by_file_ib_idx(fn) :
+    """
+    Read only the trd, mainly for IDX, or other cases 
+    _trd.csv expected to exist for the given fn
+    return 
+    bar_qt and bar_trd, as if returned by future
+    where bar_qt is the first 5 columes of bar_trd
+    """
+    if fn[-3:] == '.gz' :
+        fn = fn[:-3]
+    if fn[-4:] == '.csv' :
+        fn = fn[:-8]
+    fntrd=fn+'_trd.csv'
+    bar_trd=get_trd(fntrd)
+    ix=l1.get_inc_idx(bar_trd[:,0])
+    assert len(ix) > 3, 'too few bars found at ' + fn
+
+    bar_trd=bar_trd[ix,:]
+    ts = bar_trd[:, 0]
+    vwap = bar_trd[:, 4]
+    v = np.zeros((3, len(ts)))
+    bar=np.vstack((ts,ts,bar_trd[:,1:5].T,vwap,v)).T
+    return bar
 
 def bar_by_file_ib_qtonly(fn) :
     """ 
@@ -360,16 +399,27 @@ def bar_by_file_ib_qtonly(fn) :
 def bar_by_file_ib(fn, symbol, start_day='19980101', end_day='20990101', bar_qt=None,bar_trd=None) :
     """ 
     _qt.csv and _trd.csv are expected to exist for the given fn
+    return :
+    bar_qt[:,0], utc_ltt, bar_qt[:,1:5].T, vwap, vol, vb, vs
     """
     bid_ask_spd = get_future_spread(symbol)
     is_fx = l1.venue_by_symbol(symbol) == 'FX'
+    is_idx = l1.venue_by_symbol(symbol) == 'IDX'
 
-    if fn[-3:] == '.gz' :
-        fn = fn[:-3]
-    if fn[-4:] == '.csv' :
-        fn = fn[:-7]
-    fnqt=fn+'_qt.csv'
-    fntd=fn+'_trd.csv'
+    if is_idx :
+        print 'Getting IDX quotes!'
+        b0 = bar_by_file_ib_idx(fn)
+        if len(b0) > 0 :
+            ix0, ix1 = clip_idx(b0[:, 0], symbol, start_day, end_day)
+            return [], [], b0[ix0:ix1, :]
+        return [], [], b0
+    else :
+        if fn[-3:] == '.gz' :
+            fn = fn[:-3]
+        if fn[-4:] == '.csv' :
+            fn = fn[:-7]
+        fnqt=fn+'_qt.csv'
+        fntd=fn+'_trd.csv'
 
     if bar_trd is None or len(bar_trd) == 0 :
         has_trd = l1.get_file_size(fntd)>100 or l1.get_file_size(fntd+'.gz')>100
@@ -509,6 +559,7 @@ def fn_from_dates(symbol, sday, eday, is_front_future) :
     try :
         is_fx = l1.venue_by_symbol(symbol) == 'FX'
         is_etf = l1.venue_by_symbol(symbol) == 'ETF'
+        is_idx = l1.venue_by_symbol(symbol) == 'IDX'
     except :
         print 'Unknow symbol %s'%(symbol)
         raise ValueError('Unknown symbol ' + symbol)
@@ -522,6 +573,8 @@ def fn_from_dates(symbol, sday, eday, is_front_future) :
         fqt=glob.glob(hist_path+'/ETF/'+sym0+'_[12]*_qt.csv*')
     elif is_fx :
         fqt=glob.glob(hist_path+'/FX/'+sym0+'_[12]*_qt.csv*')
+    elif is_idx :
+        fqt=glob.glob(hist_path+'/IDX/'+sym0+'_[12]*_trd.csv*')
     else :
         if is_front_future :
             fqt=glob.glob(hist_path+'/'+symbol+'/'+sym0+'*_[12]*_qt.csv*')
@@ -572,7 +625,7 @@ def fn_from_dates(symbol, sday, eday, is_front_future) :
         else :
             break
 
-    return fns, is_fx, is_etf
+    return fns, is_fx, is_etf, is_idx
 
 def get_barsec_from_file(f) :
     fa = f.split('_')
@@ -604,7 +657,7 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
             ingestion
     """
 
-    fn, is_fx, is_etf = fn_from_dates(symbol, sday, eday, is_front_future)
+    fn, is_fx, is_etf, is_idx = fn_from_dates(symbol, sday, eday, is_front_future)
     spread = get_future_spread(symbol)
     print 'Got ', len(fn), ' files: ', fn, ' spread: ', spread
 
@@ -622,6 +675,8 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
         try :
             d0, d1 = get_days_from_file(f)
             _,_,b=bar_by_file_ib(f,symbol, start_day=max(sday,d0), end_day=min(eday,d1))
+        except KeyboardInterrupt as e :
+            raise e
         except Exception as e :
             print e
             b = []
@@ -633,6 +688,8 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
                     # just written 
 
                     # don't delete if the barsec does not match
+                    # Because I don't want the IB_hist (barsec=1) to 
+                    # overwrite the KDB days, which has barsec=5
                     if td0 not in tda :
                         dbar_repo.remove_day(td0, match_barsec=bar_sec)
             dbar_repo.update(ba, td, col, bar_sec)
@@ -693,6 +750,8 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
                             print 'no trading day is found from ', f, ' on missing day ', d
                     else :
                         print 'nothing got for missing day: ', d
+                except KeyboardInterrupt as e :
+                    raise e
                 except :
                     traceback.print_exc()
                     print 'problem processing file ', f
@@ -702,6 +761,36 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
     print 'Done! Bad Days: ', tda_bad
     return tda, tda_bad
 
+def clear_hist_dir(hist_path) :
+    """
+    gzip all the csv file.
+    If both csv and gz file exists, delete csv if gz is larger, otherwise, gzip -f csv
+    if csv file is 0 size, then leave it and delete the gz file
+    """
+    os.system('for f in `find '+hist_path+' -name *.csv -print` ; do \
+                  if [ `stat -c %s $f` -eq 0 ] ; then \
+                     echo "zero size $f " ; \
+                     rm -f "$f.gz" > /dev/null 2>&1 ; \
+                  else if [ ! -f "$f.gz" ] || [ `stat -c %s $f` -ge `stat -c %s "$f.gz"` ] ; then \
+                       echo "gzip $f" ; \
+                       gzip -f $f ; \
+                     else \
+                       echo "remove csv file $f!" ; \
+                       rm -f $f > /dev/null 2>&1 ; \
+                     fi ; \
+                  fi ; \
+               done')
+
+def all_sym(exclude_list) :
+    import ibbar
+    sym = ibbar.sym_priority_list
+    #sym += l1.ven_sym_map['FX'] 
+    #sym += ibbar.ib_sym_etf 
+    sym += ibbar.ib_sym_idx
+    
+    for s in exclude_list :
+        sym.remove(s)
+    return sym
 
 def ingest_all_symb(sday, eday, repo_path=None, get_missing=True, sym_list = None, future_inclusion=['front','back'], sym_list_exclude=[], overwrite_dbar=True, EarliestMissingDay='20180201') :
     """
@@ -721,8 +810,9 @@ def ingest_all_symb(sday, eday, repo_path=None, get_missing=True, sym_list = Non
     fx_sym = l1.ven_sym_map['FX'] 
     etf_sym = ibbar.ib_sym_etf 
     fut_sym2 = ibbar.sym_priority_list_l1_next 
+    idx_sym = ibbar.ib_sym_idx
     if sym_list is None :
-        sym_list = fut_sym + fx_sym + etf_sym
+        sym_list = fut_sym + fx_sym + etf_sym + idx_sym
     
     for sym in sym_list :
         if sym in sym_list_exclude :
@@ -736,7 +826,7 @@ def ingest_all_symb(sday, eday, repo_path=None, get_missing=True, sym_list = Non
             barsec = 5
             dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
             gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, get_missing = get_missing, overwrite_dbar=overwrite_dbar, EarliestMissingDay=EarliestMissingDay)
-        elif sym in etf_sym :
+        elif sym in etf_sym or sym in idx_sym:
             barsec = 1
             dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
             gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, get_missing = get_missing, overwrite_dbar=overwrite_dbar)
@@ -745,4 +835,5 @@ def ingest_all_symb(sday, eday, repo_path=None, get_missing=True, sym_list = Non
             repo_path_nc = repo.nc_repo_path(repo_path) # repo path of next contract
             dbar = repo.RepoDailyBar(sym, repo_path = repo_path_nc, create=True)
             gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_front_future=False, get_missing = get_missing, overwrite_dbar=overwrite_dbar, EarliestMissingDay=EarliestMissingDay)
+
 

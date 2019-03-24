@@ -76,7 +76,7 @@ class L1Bar :
         self.hours = l1.get_start_end_hour(symbol)
         self.bar_file = bar_file
         if bar_file[-3:] == '.gz' :
-            os.system('gunzip ' + bar_file)
+            os.system('gunzip -f ' + bar_file)
             self.bar_file = bar_file[:-3]
             self.gzip = True
         else :
@@ -128,7 +128,7 @@ class L1Bar :
                     break
 
         if self.gzip :
-            os.system('gzip ' + self.bar_file)
+            os.system('gzip -f ' + self.bar_file)
         return darr, np.array(uarr), np.array(barr), np.array(earr)
 
     def _best_shift_multi_seg(self, lpx_hist0, lpx_mid0, startix=0, endix=-1, verbose = True) :
@@ -695,25 +695,39 @@ def test_l1(bar_file='bar/20180727/NYM_CL_B1S.csv', hist_load_date = None, symbo
     for bar, bar5, d, ua, ba, ea in zip(bars, bar5s, darr, uarr, barr, earr) :
         verify_lpx_lr_vol_vbs_ism(bar, bar5, ua, ba, ea, d)
 
-bar_dir = [20180629,20180706,20180713,20180720,20180727,20180803,20180810,20180817,20180824,20180907,20180914,20180921,20180928,20181005,20181012,20181019,20181026,20181102,20181109]
+bar_dir = [20180629,20180706,20180713,20180720,20180727,20180803,20180810,20180817,20180824,20180907,20180914,20180921,20180928,20181005,20181012,20181019,20181026,20181102,20181109,20181116,20181123,20181207,20181214,20181221,20190104,20190111,20190118,20190125,20190201,20190208,20190215,20190222,20190301,20190308,20190315,20190322]
 
-def ingest_all_l1(bar_date_dir_list, repo_path='/cygdrive/e/research/kdb/repo', sym_list=None) :
+def gzip_everything(bar_path='./bar') :
+    os.system('for f in `find ' + bar_path + ' -name *.csv -print` ; do echo "gzip $f" ; gzip -f $f ; done ')
+
+def ingest_all_l1(bar_date_dir_list=None, repo_path='/cygdrive/e/research/kdb/repo', sym_list=None, bar_path='./bar') :
     """
     ingest all the symbols in bar_date_dir, including the future, fx, etf and future_nc
     for each *_B1S.csv* file: 
     read l1bar for symbol from bar_date_dir, i.e. NYM_CL_B1S.csv.gz
+    if bar_date_dir_list is not none, it should be a list of bar_date_dir, i.e. [20180629,20180706]
+       otherwise, all dates in bar_path
     if repo_path is not None, update the repo for that symbol. 
-    if sym_list is not None, then only these symbols are updated
+    if sym_list is not None, then only these symbols are updated,
+       otherwise, all symbols found in the bar directory will be updated
     Note 1: future_nc has *_B1S_bc.csv*,  i.e. NYM_CL_B1S_bc.csv.gz
             and have different repo_path than front contract, 
             obtained by repo.nc_repo_path(repo_path), i.e. repo_nc
     """
     repo_path_nc = repo.nc_repo_path(repo_path) if repo_path is not None else None
+    #gzip_everything(bar_path)
+    if bar_date_dir_list is None :
+        b = glob.glob(bar_path+'/*')
+        bar_date_dir_list=[]
+        for b0 in b :
+            bar_date_dir_list.append(b0.split('/')[-1])
+        print 'got ', len(bar_date_dir_list), ' directories to update'
     for bar_date_dir in bar_date_dir_list :
-        fs_front = 'bar/'+str(bar_date_dir)+'/*_B1S.csv*'
-        fs_back  = 'bar/'+str(bar_date_dir)+'/*_B1S_bc.csv*'
+        fs_front = bar_path+'/'+str(bar_date_dir)+'/*_B1S.csv*'
+        fs_back  = bar_path+'/'+str(bar_date_dir)+'/*_B1S_bc.csv*'
         for fs, rp in zip([fs_front, fs_back], [repo_path, repo_path_nc]) :
             fn = glob.glob(fs)
+            print 'found ', len(fn), ' files for ', rp
             for f in fn :
                 sym = f.split('/')[-1].split('_')[1]
                 if sym_list is not None and sym not in sym_list :
@@ -729,4 +743,5 @@ def ingest_all_l1(bar_date_dir_list, repo_path='/cygdrive/e/research/kdb/repo', 
                 except :
                     import traceback
                     traceback.print_exc()
+
 

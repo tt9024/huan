@@ -873,6 +873,14 @@ def UpdateFromRepo(sym_arr, day_arr, repo_path_write, repo_path_read_arr, bar_se
             dbar.update([b],[d],[c],bar_sec)
             fix_lr_nan(dbar, [d])
 
+def copy_from_repo(symarr, repo_path_write='./repo', repo_path_read_arr=['./repo_cme'], bar_sec=1, sday='20170601', eday='20171231', keep_overnight='onzero') :
+    tdi=l1.TradingDayIterator(sday)
+    d=tdi.yyyymmdd()
+    while d <= eday :
+        UpdateFromRepo(symarr, [d], repo_path_write, repo_path_read_arr, bar_sec, keep_overnight=keep_overnight)
+        tdi.next()
+        d=tdi.yyyymmdd()
+
 ################################################
 #  Some test procedures for verifying repo data#
 ################################################
@@ -905,23 +913,26 @@ def plot_repo(repo_path_arr, symbol_arr, sday, eday, bsarr=None, plotdt=True) :
         ax1.grid() ; ax2.grid() ; ax3.grid()
         for rp, bs in zip(repo_path_arr, bsarr) :
             rpstr = rp.split('/')[-1]
-            dbar = RepoDailyBar(sym, repo_path=rp)
-            bar5m = dbar.daily_bar(sday, 0, bs, end_day=eday, group_days=1); 
-            bar5m = np.vstack(bar5m)
-            if plotdt :
-                dt = getdt(bar5m[:, 0])
-            else :
-                dt = bar5m[:,0]
+            try :
+                dbar = RepoDailyBar(sym, repo_path=rp)
+                bar5m = dbar.daily_bar(sday, 0, bs, end_day=eday, group_days=1); 
+                bar5m = np.vstack(bar5m)
+                if plotdt :
+                    dt = getdt(bar5m[:, 0])
+                else :
+                    dt = bar5m[:,0]
 
-            lr = bar5m[:, 1]
-            vol = bar5m[:,2]
-            vbs = bar5m[:, 3]
-            lpx = bar5m[:, 4]
-         
-            ax1.plot(dt, lpx, label=rpstr)
-            ax2.plot(dt, np.cumsum(lr), label=rpstr)
-            ax3.plot(dt, np.cumsum(vbs), label=rpstr)
-            ax3.plot(dt, np.cumsum(vol), label=rpstr)
+                lr = bar5m[:, 1]
+                vol = bar5m[:,2]
+                vbs = bar5m[:, 3]
+                lpx = bar5m[:, 4]
+             
+                ax1.plot(dt, lpx, label=rpstr)
+                ax2.plot(dt, np.cumsum(lr), label=rpstr)
+                ax3.plot(dt, np.cumsum(vbs), label=rpstr)
+                ax3.plot(dt, np.cumsum(vol), label=rpstr)
+            except :
+                print 'problem with ', rp
 
         pl.gcf().autofmt_xdate()
         pl.legend(loc='best')

@@ -1512,6 +1512,15 @@ def update_from_cme(sym_dict) :
             repo.UpdateFromRepo([symbol], days, repo_path_write, [repo_path_read], bar_sec, keep_overnight='onzero',\
                                 should_upd_func=repo.trd_cmp_func)
 
+
+def copy_from_repo(symarr, repo_path_write='./repo', repo_path_read_arr=['./repo_cme'], bar_sec=1, sday='20170601', eday='20171231') :
+    tdi=l1.TradyingDayIterator(sday)
+    d=tdi.yyyymmdd()
+    while d <= eday :
+        repo.UpdateFromRepo(symarr, [d], repo_path_write, repo_path_read_arr, bar_sec)
+        tdi.next()
+        d=tdi.yyyymmdd()
+
 def fill_missing_kdb(sym_dict) :
     """
     getting from the 
