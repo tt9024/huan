@@ -473,7 +473,7 @@ def bar_by_file_future_trd(fn,guess_dir=True) :
 
 def bar_by_file_etf(fn, skip_header=5) :
     """
-    date(0),ric,timeStart(2),exchange_id,country_code,mic,lastTradeTickTime(6),open(7),high,low,close,avgPrice,vwap(12),minSize,maxSize,avgSize,avgLogSize,medianSize,volume(18),dolvol,cntChangePrice,cntTrade,cntUpticks,cntDownticks,sigma,buyvol(24),sellvol(25),buydolvol,selldolvol,cntBuy,cntSell,sideSigma,priceImpr,maxPriceImpr,dolimb,midvol,gmt_offset,lastQuoteTickTime,openBid(37),openAsk,highBid,highAsk,lowBid,lowAsk,closeBid,closeAsk,avgBid,avgAsk,minBidSize,minAskSize,maxBidSize,maxAskSize,avgBidSize,avgAskSize,avgLogBidSize,avgLogAskSize,avgSpread,cntChangeBid,cntChangeAsk,cntTick
+    date(0),ric,timeStart(2),exchange_id,country_code,mic,lastTradeTickTime(6),open(7),high,low,close,avgPrice,vwap(12),minSize,maxSize,avgSize,avgLogSize,medianSize,volume(18),dolvol,cntChangePrice,cntTrade,cntUpticks,cntDownticks,sigma,buyvol(25),sellvol(26),buydolvol,selldolvol,cntBuy,cntSell,sideSigma,priceImpr,maxPriceImpr,dolimb,midvol,gmt_offset,lastQuoteTickTime,openBid(38),openAsk,highBid,highAsk,lowBid,lowAsk,closeBid,closeAsk,avgBid,avgAsk,minBidSize,minAskSize,maxBidSize,maxAskSize,avgBidSize,avgAskSize,avgLogBidSize,avgLogAskSize,avgSpread,cntChangeBid,cntChangeAsk,cntTick
     2016.11.10,XLF,04:09:55.000,,,,04:09:57.092,20.99,20.99,20.98,20.98,20.985,20.985,100,100,100,4.60517,100,200,4197,1,2,0,1,0.005,0,-200,0,-4197,0,2,0,-1,200,-4197,0,-5,04:09:57.092,20.98,21.99,20.98,21.99,20.94,21.99,20.94,21.99,20.96,21.99,1,20,21,20,11,20,1.52226,2.99573,479.632,1,0,2
 
     Return:
@@ -494,7 +494,7 @@ def bar_by_file_etf(fn, skip_header=5) :
     Eary days, i.e. 1998 - 2010, is quite noisy, especially the open tick.  outlier and cleaning is required.
     """
 
-    bar_raw=np.genfromtxt(fn,delimiter=',',usecols=[0,2,6,12,18,24,25, 38,39,40,41,42,43,44,45], skip_header=skip_header,\
+    bar_raw=np.genfromtxt(fn,delimiter=',',usecols=[0,2,6,12,18,25,26, 38,39,40,41,42,43,44,45], skip_header=skip_header,\
             dtype=[('day','|S12'),('bar_start','|S14'),('last_trade','|S14'),\
                    ('vwap','<f8'),('volume','i8'),('bvol','i8'),('svol','i8'),\
                    ('openbid','<f8'), ('openask','<f8'), ('highbid','<f8'), ('highask','<f8'),\
