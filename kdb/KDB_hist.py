@@ -1204,7 +1204,7 @@ def gen_bar0(symbol,year,check_only=False, spread=None, bar_sec=5, kdb_hist_path
     return bar_lr, td_arr, col_arr
 
 
-def gen_bar(symbol, year_s=1998, year_e=2018, check_only=False, repo=None, kdb_hist_path = '/cygdrive/e/kdb', old_cl_repo = None, bar_sec=5) :
+def gen_bar(symbol, year_s=1998, year_e=2018, check_only=False, dbar=None, kdb_hist_path = '/cygdrive/e/kdb', old_cl_repo = None, bar_sec=5, overwrite_dbar=False) :
     td=[]
     col=[]
     years=np.arange(year_s, year_e+1)
@@ -1212,8 +1212,11 @@ def gen_bar(symbol, year_s=1998, year_e=2018, check_only=False, repo=None, kdb_h
         try :
             barlr, td_arr, col_arr=gen_bar0(symbol,str(y),check_only=check_only, kdb_hist_path = kdb_hist_path, bar_sec=bar_sec, old_cl_repo=old_cl_repo)
             if len(barlr) > 0 :
-                if repo is not None :
-                    repo.update(barlr, td_arr, col_arr, bar_sec)
+                if dbar is not None :
+                    if overwrite_dbar :
+                        for d in td_arr :
+                            dbar.remove_day(d, match_barsec=bar_sec)
+                    dbar.update(barlr, td_arr, col_arr, bar_sec)
                 td+=td_arr
                 col+=col_arr
         except :
@@ -1279,7 +1282,7 @@ def fix_days_from_old_cl_repo(td, sday, eday, old_cl_repo) :
         day1=ti.yyyymmdd()
     return barr, tda, col
 
-def ingest_all_kdb_repo(kdb_path='/cygdrive/c/zfu/data/kdb', repo_path='/cygdrive/c/zfu/kisco/repo', all_sym=kdb_future_symbols + kdb_fx_symbols + kdb_etf_symbols, year_s=1998, year_e=2018) :
+def ingest_all_kdb_repo(kdb_path='/cygdrive/c/zfu/data/kdb', repo_path='/cygdrive/c/zfu/kisco/repo', all_sym=kdb_future_symbols + kdb_fx_symbols + kdb_etf_symbols, year_s=1998, year_e=2018, overwrite_dbar=False) :
     sym_arr = []
     td_arr = []
     tdbad_arr = []
@@ -1292,7 +1295,7 @@ def ingest_all_kdb_repo(kdb_path='/cygdrive/c/zfu/data/kdb', repo_path='/cygdriv
                 print 'creating repo for ', sym, ' repo_path ', repo_path
                 db = repo.RepoDailyBar(sym, repo_path=repo_path, create=True)
         try :
-            td, _, bd = gen_bar(sym, year_s, year_e, repo=db, kdb_hist_path=kdb_path)
+            td, _, bd = gen_bar(sym, year_s, year_e, dbar=db, kdb_hist_path=kdb_path, overwrite_dbar=overwrite_dbar)
         except :
             traceback.print_exc()
             print 'problem reading symbol ' + sym
