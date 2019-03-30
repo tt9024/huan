@@ -73,6 +73,7 @@ class L1Bar :
         2. read and ingest bar files
         """
         self.symbol = symbol
+        self.venue = l1.venue_by_symbol(symbol)
         self.hours = l1.get_start_end_hour(symbol)
         self.bar_file = bar_file
         if bar_file[-3:] == '.gz' :
@@ -91,7 +92,7 @@ class L1Bar :
         self.utc21 = l1.TradingDayIterator.local_ymd_to_utc('20180817', 17, 0, 0)
         self.bar_sec = 1  # always fixed as 1 second bar for C++ l1 bar writer
 
-    def read(self) :
+    def read(self, noret=False) :
         """
         read all days from the bar file, and update dbar_repo with basic columns and
         extended columns if available.
@@ -114,16 +115,19 @@ class L1Bar :
         barr = []
         earr = []
         with open(self.bar_file, 'r') as f:
+            lastpx=None
             while True :
-                day, utc, bcols, ecols = self._read_day(f)
+                day, utc, bcols, ecols = self._read_day(f,lastpx=lastpx)
                 if day is not None :
                     print 'read day ', day, ' ', len(utc), ' bars.', ' has ext:', ecols is not None
                     if self.dbar is not None:
                         self._upd_repo(day, utc, bcols, ecols)
-                    darr.append(day)
-                    uarr.append(utc)
-                    barr.append(bcols)
-                    earr.append(ecols)
+                    lastpx=bcols[-1,5]
+                    if not noret :
+                        darr.append(day)
+                        uarr.append(utc)
+                        barr.append(bcols)
+                        earr.append(ecols)
                 else :
                     break
 
@@ -286,6 +290,14 @@ class L1Bar :
         overwrite the vol and vbx, also the lr based lr (see NOTES)
         update the rest 8 columns
 
+        bcol_arr: array of basic columns for each day.  
+                 ['vol', 'vbs', 'spd', 'bs', 'as', 'mid']
+        ecol_arr: array of extended columns for each day
+                 ['qbc', 'qac', 'tbc', 'tsc', 'ism1']
+
+        ow_col: ['vol', 'vbs', 'lpx']
+        upd_col:['spd','bs','as','qbc','qac','qbc','tbc','tsc','ism1']
+
         Note 1:
         There are 1~2 second drift on the hist's mid and L1's mid.
         Since the L1 is the live trading one, it is given more emphasis. 
@@ -307,15 +319,30 @@ class L1Bar :
         L1 price and IB_hist price.  This diff is defined with 
         abs(mean(lpx-mid)) > 5 * ticks 
         In this case, manual operation needed to resolve the conflict
+
+        Note 5:
+        EUX and ICE has first bar's buy volume trashed with big number.
+        Simply remove this bar if the buy volume is 100 times more
+        than median
         """
-        ow_cols = repo.col_idx(['vol', 'vbs', 'lpx'])
+        ow_cols = repo.col_idx(['lr','vol','vbs','lpx'])
         mid=bcols[:,-1]
-        ow_arr = np.vstack((bcols[:, :2].T, mid)).T
+        lm=np.log(mid)
+        lr=np.r_[0,lm[1:]-lm[:-1]]
+        ow_arr = np.vstack((lr,bcols[:, :2].T,mid)).T
         upd_cols = repo.col_idx(['spd','bs','as'])
         upd_arr = bcols[:, 2:5]
         if ecols is not None:
             upd_cols+=repo.col_idx(['qbc','qac','tbc','tsc','ism1'])
             upd_arr = np.vstack((upd_arr.T, ecols.T)).T
+
+        if self.venue in ['ICE', 'EUX'] :
+            if ow_arr[0,repo.ci(ow_cols,repo.volc)] > np.median(ow_arr[:,repo.ci(ow_cols,repo.volc)])*100 :
+                print 'wrong volume on first bar of ICE/EUX, removing!'
+                utc=np.delete(utc,0)
+                mid=np.delete(mid,0)
+                ow_arr=np.delete(ow_arr, 0, axis=0)
+                upd_arr=np.delete(upd_arr,0,axis=0)
 
         bar, col, bs = self.dbar.load_day(day)
         if len(bar) == 0 or repo.col_idx('utc') not in col:
@@ -374,16 +401,37 @@ class L1Bar :
         # raise exception if l1 data is off with lpx of the IB_hist by 5 ticks
         # This is usually caused by contract mismatch in l1 and IB_hist data
         # Unfortunately this needs attention to resolve the conflict
+
+        # Note: use lr to reconstruct lpx, this could solve the issue
         #########################################################################
         if repo.col_idx('lpx') in col :
             # check for potential mismatch
             lpx = bar[utcix, repo.ci(col, repo.col_idx('lpx'))]
-            mid = ow_arr[:, -1]
+            mid = ow_arr[:, repo.ci(ow_cols,repo.lpxc)]
             diff = np.abs(np.mean(lpx-mid))
             if diff > l1.asset_info(self.symbol)[0] * 5 :
-                raise ValueError('contract mismatch on '+ day + ' for ' + self.symbol + ' diff ' + str(diff) + ' cnt ' + str(len(mid)))
+                #raise ValueError('contract mismatch on '+ day + ' for ' + self.symbol + ' diff ' + str(diff) + ' cnt ' + str(len(mid)))
+                print 'contract mismatch on '+ day + ' for ' + self.symbol + ' diff ' + str(diff) + ' cnt ' + str(len(mid))
 
-        self.dbar.overwrite([ow_arr[1:, :]], [day], [ow_cols], self.bar_sec, rowix=[utcix[1:]])
+                # use lr to update, repo should recontruct lpx
+                ix=repo.ci(ow_cols, repo.lpxc)
+                ow_arr=np.delete(ow_arr,ix,axis=1)
+                ow_cols.remove(repo.lpxc)
+            else :
+                # use lpx to update, repo should reconstruct lr
+                ix=repo.ci(ow_cols, repo.lrc)
+                ow_arr=np.delete(ow_arr,ix,axis=1)
+                ow_cols.remove(repo.lrc)
+        else :
+            # we have a day but no lpx in columns, that's an error
+            # if this happens a lot, then consider write a new day
+            print 'ERROR! no lpx on ' + day + ' for ' + self.symbol + ' write as new!'
+            self.dbar.remove_day(day)
+            self._copy_to_repo(day, utc, ow_arr, ow_cols, upd_arr, upd_cols)
+            return
+
+        ix0=1 if utcix[0]==0 else 0
+        self.dbar.overwrite([ow_arr[ix0:, :]], [day], [ow_cols], self.bar_sec, rowix=[utcix[ix0:]])
 
         # upd_arr col: ['spd', 'bs', 'as', 'qbc', 'qac', 'tbc', 'tsc', 'ism1']
         # 'spd' needs to fill back/forward
@@ -506,20 +554,30 @@ class L1Bar :
             ext = self._ext_cols(cols)
         return utc, basic, ext
 
-    def _read_day(self, bfp) :
+    def _read_day(self, bfp, lastpx=None) :
         """
         day, utc, bcols, ecols = read_next_day(self, bfp)
-
+        basic: the basic fields without utc: ['vol', 'vbs', 'spd', 'bs', 'as', 'mid']
+        ext: the extended fields:            ['qbc', 'qac', 'tbc', 'tsc', 'ism1']
         read a day worth of bars in, normalize to either basic or ext format
         bfp: the file descriptor for read on the next lines.  
         day: the day obtained
         utc: an array of time stamp (in second) for each bar
         bcols and ecols: 2D arraies of 5 columns (basic) and 5 columns (ext)
         
+        Note 1:
         Upon return the file descriptor can be read for the next day
         Note, the rule for whether a day has basic or ext is the following:
         1. day before 7/17 don't have ext
         2. 13 columns for all lines in the day
+
+        Note 2:
+        lastpx is used to remove the first stuck-up px of each day. 
+        The tp upon starting could use the old price from shm for a
+        while before new price in.  Remove the first px that is 
+        same with lastpx.
+        lastpx can be last tick of previous day, or in case the
+        first day in bar directory, the first px of first day
         """
 
         day = None
@@ -527,6 +585,8 @@ class L1Bar :
         bcols = []
         ecols = []
         parse_ext = True
+        first_tick=True
+        ticks=0
         while True :
             l = bfp.readline()
             if len(l) > 20 : # some minimum size
@@ -534,17 +594,30 @@ class L1Bar :
                 if basic is None : 
                     # parsing error, next
                     continue
+                if ext is None :
+                    parse_ext = False
                 d0 = l1.TradingDayIterator.utc_to_local_trading_day(utc)
                 if day is None :
                     day = d0
                 elif day != d0 :
                     bfp.seek(-len(l), 1)
                     break
+
+                if first_tick :
+                    # check stuck up first tick
+                    thispx=basic[5]
+                    if lastpx is None :
+                        lastpx = thispx
+                    if thispx == lastpx :
+                        ticks+=1
+                        continue
+                    else :
+                        first_tick=False
+                        print 'removed first ', ticks, ' ticks for stuck'
+
                 bcols.append(basic)
                 if ext is not None :
                     ecols.append(ext)
-                else :
-                    parse_ext = False
                 tcol.append(utc)
             else :
                 break
@@ -700,7 +773,7 @@ bar_dir = [20180629,20180706,20180713,20180720,20180727,20180803,20180810,201808
 def gzip_everything(bar_path='./bar') :
     os.system('for f in `find ' + bar_path + ' -name *.csv -print` ; do echo "gzip $f" ; gzip -f $f ; done ')
 
-def ingest_all_l1(bar_date_dir_list=None, repo_path='/cygdrive/e/research/kdb/repo', sym_list=None, bar_path='./bar') :
+def ingest_all_l1(bar_date_dir_list=None, repo_path='./repo', sym_list=None, bar_path='./bar') :
     """
     ingest all the symbols in bar_date_dir, including the future, fx, etf and future_nc
     for each *_B1S.csv* file: 
@@ -722,6 +795,7 @@ def ingest_all_l1(bar_date_dir_list=None, repo_path='/cygdrive/e/research/kdb/re
         for b0 in b :
             bar_date_dir_list.append(b0.split('/')[-1])
         print 'got ', len(bar_date_dir_list), ' directories to update'
+
     for bar_date_dir in bar_date_dir_list :
         fs_front = bar_path+'/'+str(bar_date_dir)+'/*_B1S.csv*'
         fs_back  = bar_path+'/'+str(bar_date_dir)+'/*_B1S_bc.csv*'
@@ -739,9 +813,78 @@ def ingest_all_l1(bar_date_dir_list=None, repo_path='/cygdrive/e/research/kdb/re
                     dbar = repo.RepoDailyBar(sym, repo_path=rp, create=True)
                 l1b = L1Bar(sym, f, dbar)
                 try :
-                    l1b.read()
+                    l1b.read(noret=True)
                 except :
                     import traceback
                     traceback.print_exc()
 
+def fix_eux_ice_first_bar_volume(repo_l1='./repo_l1', repo_hist='./repo', sday=None, eday=None) :
+    """
+    EUX and ICE had the first bar's buy volume wrong, try to get it from 
+    repo_hist, or set to 0
+    This is included in the L1Bar.read(), so it's not needed.
+    """
+    if sday is None :
+        sday = '00000000'
+    if eday is None :
+        eday = '99999999'
+
+    eur_sym = l1.ven_sym_map['EUX']
+    ice_sym = l1.ven_sym_map['ICE']
+
+    #for sym in eur_sym + ice_sym :
+    for sym in ['LCO'] :
+        print 'symbol: ', sym
+        dbarl1=repo.RepoDailyBar(sym, repo_path=repo_l1)
+        dbar=repo.RepoDailyBar(sym, repo_path=repo_hist)
+
+        days=dbarl1.all_days()
+        for d in days :
+            if d < sday or d > eday:
+                continue
+
+            print 'day ', d, 
+            b1,c1,bs1=dbarl1.load_day(d)
+            b,c,bs=dbar.load_day(d)
+            changed=False
+            ix0 = np.nonzero(b1[:, repo.ci(c1,repo.volc)]>1e-10)[0]
+            if len(ix0)==0 :
+                print 'all zero volume! '
+                continue
+            ix0=ix0[0]
+            vol0=b1[ix0, repo.ci(c1,repo.volc)]
+            vbs0=b1[ix0, repo.ci(c1,repo.vbsc)]
+            print vol0, vbs0,
+            if bs == bs1 and len(b1)>0 and len(b)>0 :
+                # use b's first bar volume
+                vol0=b[ix0,repo.ci(c,repo.volc)]
+                vbs0=b[ix0,repo.ci(c,repo.vbsc)]
+                changed=True
+                print 'using repo! ', vol0, vbs0
+            else :
+                vbs1=b1[:,repo.ci(c1,repo.vbsc)]
+                if np.abs(vbs1[ix0]) > 100 * np.median(np.abs(vbs1)) :
+                    # set to 0
+                    vol0=0
+                    vbs0=0
+                    changed=True
+                    print 'setting to 0!'
+            if changed :
+                b1[ix0, repo.ci(c1,repo.volc)]=vol0
+                b1[ix0, repo.ci(c1,repo.vbsc)]=vbs0
+                dbarl1._dump_day(d, b1,c1,bs1)
+            else :
+                print 'all good!'
+
+def backup_to_repo(sym_arr, sday, eday, repo_l1='./repo_back', repo_hist='./repo') :
+    """
+    backup the content of repo_hist to repo_l1 before ingestion
+    """
+    repo.copy_from_repo(sym_arr,repo_path_write=repo_l1, repo_path_read_arr=[repo_hist], bar_sec=1, sday=sday, eday=eday, keep_overnight='no')
+
+def get_from_back(sym_arr, sday, eday, repo_l1='./repo_back', repo_hist='./repo') :
+    """
+    recover from backup
+    """
+    repo.copy_from_repo(sym_arr,repo_path_write=repo_hist, repo_path_read_arr=[repo_l1], bar_sec=1, sday=sday, eday=eday, keep_overnight='no')
 

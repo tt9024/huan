@@ -405,6 +405,7 @@ def bar_by_file_ib(fn, symbol, start_day='19980101', end_day='20990101', bar_qt=
     bid_ask_spd = get_future_spread(symbol)
     is_fx = l1.venue_by_symbol(symbol) == 'FX'
     is_idx = l1.venue_by_symbol(symbol) == 'IDX'
+    is_etf = l1.venue_by_symbol(symbol) == 'ETF'
 
     if is_idx :
         print 'Getting IDX quotes!'
@@ -522,6 +523,13 @@ def bar_by_file_ib(fn, symbol, start_day='19980101', end_day='20990101', bar_qt=
     vol=ts[:,5].copy()
     vb=vol.copy()
     vs=vol.copy()
+    if is_etf :
+        print 'adjust ETF size '
+        # IB's ETF volume in LOTS, i.e. 250 = 2 LOTS
+        vol=vol*100+50
+        vb=vb*100+50
+        vs=vs*100+50
+
     utc_ltt=ts[:,0]
     if len(ix0) > 0 : 
         utc_ltt[ix0]=np.nan

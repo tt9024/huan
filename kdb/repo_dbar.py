@@ -121,6 +121,13 @@ def ix_by_utc(u0, utc, verbose=True) :
         ix0=ix0[zix]
     return ix0, zix
 
+def sync_lr_lpx(dbar, day, upd_col) :
+    if upd_col is None :
+        print 'upd_col is none for sync_lr_lpx!'
+        return
+    sync_lr_by_lpx(dbar,day,upd_col=upd_col)
+    sync_lpx_by_lr(dbar,day,upd_col=upd_col)
+
 def sync_lr_by_lpx(dbar, day, upd_col=None) :
     """
     when lpx is updated, the LR is updated accordingly. 
@@ -149,12 +156,38 @@ def sync_lr_by_lpx(dbar, day, upd_col=None) :
     else :
         lr0 = 0
     # don't update the over-night lr
-    lr = np.r_[lr0, np.log(lpx_hist[1:])-np.log(lpx_hist[:-1])]
+    lgpx=np.log(lpx_hist)
+    lr = np.r_[lr0, lgpx[1:]-lgpx[:-1]]
+    try :
+        #lr = lr.reshape((len(u0), 1))
+        col = col_idx(['lr','lpx'])
+        dbar.overwrite([np.vstack((lr,lpx_hist)).T], [day], [col], bs)
+    except :
+        traceback.print_exc()
+
+def sync_lpx_by_lr(dbar, day, upd_col=None) :
+    """
+    when lr is updated but not lpx, then 
+    reconstruct a lpx based on lr. 
+    This is useful for overwriting by 
+    different contracts
+    Note 1 the first lpx is used to reconstruct the lpx
+    """
+    if upd_col is not None:
+        if 'lr' not in col_name(upd_col) or 'lpx' in col_name(upd_col) :
+            return
+        else :
+            print 'lr updated but not lpx, lpx to be recalculated',
+    print 'construct lpx based on lr!'
+    bar, col, bs = dbar.load_day(day)
+    lpx0 = bar[0, ci(col, col_idx('lpx'))]
+    lr = bar[:, ci(col, col_idx('lr'))]
+    lpx=np.r_[lpx0,np.exp(np.log(lpx0)+np.cumsum(lr[1:]))]
 
     try :
-        lr = lr.reshape((len(u0), 1))
-        col = col_idx(['lr'])
-        dbar.overwrite([lr], [day], [col], bs)
+        #lpx = lpx.reshape((len(lr), 1))
+        col = col_idx(['lr','lpx'])
+        dbar.overwrite([np.vstack((lr,lpx)).T], [day], [col], bs)
     except :
         traceback.print_exc()
 
@@ -318,7 +351,7 @@ class RepoDailyBar :
 
             # writing back to daily
             self._dump_day(d, rb, col, bs)
-            sync_lr_by_lpx(self, d, upd_col=c)
+            sync_lr_lpx(self, d, upd_col=c)
         print 'Done'
 
     def overwrite(self, bar_arr, day_arr, col_arr, bar_sec, rowix = None, utcix = None) :
@@ -396,7 +429,7 @@ class RepoDailyBar :
                 bs = bar_sec
 
             self._dump_day(d, rb, col, bs)
-            sync_lr_by_lpx(self, d, upd_col=c)
+            sync_lr_lpx(self, d, upd_col=c)
 
     def daily_bar(self, start_day, day_cnt, bar_sec, end_day=None, cols=[utcc,lrc,volc,vbsc,lpxc], group_days = 5) :
         """
@@ -552,6 +585,12 @@ class RepoDailyBar :
         except :
             traceback.print_exc()
             print self.symbol, ' on ', day, ': not found in daily file, NOT REMOVED '
+
+    def all_days(self) :
+        """
+        get all the days in the repo
+        """
+        return self.idx['daily'].keys()
 
     def _dump_day(self, day, bar, col, bar_sec) :
         """
@@ -932,9 +971,10 @@ def plot_repo(repo_path_arr, symbol_arr, sday, eday, bsarr=None, plotdt=True) :
                 ax3.plot(dt, np.cumsum(vbs), label=rpstr)
                 ax3.plot(dt, np.cumsum(vol), label=rpstr)
             except :
+                import traceback
+                traceback.print_exc()
                 print 'problem with ', rp
 
         pl.gcf().autofmt_xdate()
         pl.legend(loc='best')
-
 
