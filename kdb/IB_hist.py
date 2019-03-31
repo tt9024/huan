@@ -503,7 +503,7 @@ def bar_by_file_ib(fn, symbol, start_day='19980101', end_day='20990101', bar_qt=
         else :
             break
 
-    tix=np.searchsorted(tts,qts)
+    tix=np.clip(np.searchsorted(tts,qts),0,len(tts)-1)
     # they should be the same, otherwise, patch the different ones
     ix0=np.nonzero(tts[tix]-qts!=0)[0]
     if len(ix0) != 0 : 

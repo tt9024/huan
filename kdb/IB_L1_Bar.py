@@ -486,7 +486,7 @@ class L1Bar :
         # validate
         if abs(cols[1]*cols[2]) <= 1e-12 or \
            abs(cols[3]*cols[4]) <= 1e-12 :
-            print 'problem with the cols {0}'.format(cols)
+            #print 'problem with the cols {0}'.format(cols)
             return None
         bcol=[cols[5] + cols[6], cols[5]-cols[6], cols[3]-cols[2], cols[1], cols[4], (cols[2] + cols[3])/2]
         if self.venue == 'ETF' :

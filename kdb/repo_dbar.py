@@ -116,7 +116,7 @@ def ix_by_utc(u0, utc, verbose=True) :
         print 'got %d (out of %d total) bars, mismatch %d'%(len(utc), len(u0), len(utc)-len(zix))
     if len(zix) != len(utc) :
         if verbose :
-            print 'missing: ', np.delete(np.arange(len(u0)), ix0[zix])
+            print 'missing: ', np.delete(np.arange(len(u1)), ix0[zix])
             print 'not used:', np.delete(np.arange(len(ix0)), zix)
         ix0=ix0[zix]
     return ix0, zix
