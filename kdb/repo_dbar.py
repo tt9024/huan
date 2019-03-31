@@ -100,7 +100,7 @@ def ci(carr, c) :
     for i, c0 in enumerate (carr) :
         if c0 == c :
             return i
-    raise ValueError(col_name(c) + ' not found in ' + col_name(carr))
+    raise ValueError(str(c) + ' not found in ' + col_name(carr))
 
 def ix_by_utc(u0, utc, verbose=True) :
     """
@@ -146,6 +146,10 @@ def sync_lr_by_lpx(dbar, day, upd_col=None) :
             print 'lpx updated but not lr, lr to be recalculated',
     print 'update lr based on lpx!'
     bar, col, bs = dbar.load_day(day)
+    if lpxc not in col :
+        print 'sync_lr_by_lpx without lpx on ', day, ' ', dbar.symbol, ' col: ', c
+        return
+
     lpx_hist = bar[:, ci(col, col_idx('lpx'))]
     u0 = bar[:, ci(col, col_idx('utc'))]
 
@@ -180,7 +184,14 @@ def sync_lpx_by_lr(dbar, day, upd_col=None) :
             print 'lr updated but not lpx, lpx to be recalculated',
     print 'construct lpx based on lr!'
     bar, col, bs = dbar.load_day(day)
+    if lrc not in col or lpxc not in col :
+        print 'sync_lpx_by_lr on ', day, ' ', dbar.symbol, ' without lrc + lpxc '
+        return
+
     lpx0 = bar[0, ci(col, col_idx('lpx'))]
+    if np.abs(lpx0) < 1e-10 :
+        raise ValueError('sync_lpx_by_lr on ', day, ' ', dbar.symbol, ' no lpx0 to calculate lpx from lr!')
+
     lr = bar[:, ci(col, col_idx('lr'))]
     lpx=np.r_[lpx0,np.exp(np.log(lpx0)+np.cumsum(lr[1:]))]
 
@@ -230,7 +241,6 @@ def nc_repo_path(repo_path) :
         v+=s0+'/'
     v+= s[-1]
     return v
-
 
 class RepoDailyBar :
     @staticmethod
@@ -778,6 +788,50 @@ class RepoDailyBar :
 
         return np.array(nb).T
 
+    def _delete_rows(self,b,c,ix_arr) :
+        """
+        remove rows indexed as ix_arr from b. 
+        b and c is returned by
+        b,c,bs=self.load_day()
+
+        fill-in missing values.  set 0 or fill previous values. 
+        Note 1: in case there is no previous tick, then next tick is used to fill in 
+        """
+        for ix in ix_arr :
+            # find ref tick
+            ix0=ix
+            while ix0 >= 0 and ix0 in ix_arr :
+                ix0-=1
+            if ix0<0:
+                ix0=0
+                while ix0 in ix_arr :
+                    ix0+=1
+            try :
+                r0 = b[ix0,:]
+            except :
+                print 'cannot find a row after deleteion!'
+                return []
+
+            # fill in removing row
+            for i,c0 in enumerate(c) :
+                if c0 == utcc :
+                    continue
+                if c0 in [lttc, lpxc] +  col_idx(['ism1','spd','bs','as']) :
+                    # needs to get the latest snap
+                    b[ix,i]=r0[i]
+                elif c0 in [lrc, volc, vbsc, lrhlc] + col_idx(['qbc','qac','tbc','tsc']):
+                    # needs fill in 0
+                    b[ix,i]=0
+                elif c0 in[vwapc] :
+                    # set it equal to previous lpx is possible
+                    if lpxc in c :
+                        b[ix,i]=r0[ci(c,lpxc)]
+                    else :
+                        b[ix,i]=r0[i]
+                else :
+                    raise ValueError('unknow col ' + str(c0))
+        return b
+
     def _fill_last(self, v) :
         """
         fill nan in v with the previous number, fill the initial nan with
@@ -913,10 +967,38 @@ def UpdateFromRepo(sym_arr, day_arr, repo_path_write, repo_path_read_arr, bar_se
             fix_lr_nan(dbar, [d])
 
 def copy_from_repo(symarr, repo_path_write='./repo', repo_path_read_arr=['./repo_cme'], bar_sec=1, sday='20170601', eday='20171231', keep_overnight='onzero') :
+    """
+    simply copy days from one repo to another, with overnight lr options.
+    """
     tdi=l1.TradingDayIterator(sday)
     d=tdi.yyyymmdd()
     while d <= eday :
         UpdateFromRepo(symarr, [d], repo_path_write, repo_path_read_arr, bar_sec, keep_overnight=keep_overnight)
+        tdi.next()
+        d=tdi.yyyymmdd()
+
+def remove_outlier_lr(dbar, sday, eday, outlier_mul=200) :
+    tdi=l1.TradingDayIterator(sday)
+    d=tdi.yyyymmdd()
+    while d <= eday :
+        b,c,bs=dbar.load_day(d)
+        if len(b) > 0 and bs == 1 :
+            lr = b[:, ci(c,lrc)]
+            vol= b[:,ci(c,volc)]
+            lrmax=max(np.std(lr)*outlier_mul,0.0001)
+            volm=np.mean(vol)
+            ix=np.nonzero(np.abs(lr)>lrmax)[0]
+            if len(ix) > 0 :
+                ix0=np.nonzero(vol[ix]<volm)[0]
+                if len(ix0) > 0 :
+                    print 'outlier ', len(ix0), ' ticks!'
+                    ix0=ix[ix0]
+                    dbar._delete_rows(b,c,ix0)
+                    # remove lpx and overwrite the day
+                    if lpxc in c :
+                        b=np.delete(b,ci(c,lpxc),axis=1)
+                        c.remove(lpxc)
+                    dbar.overwrite([b],[d],[c],1)
         tdi.next()
         d=tdi.yyyymmdd()
 

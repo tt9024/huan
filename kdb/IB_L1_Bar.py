@@ -120,14 +120,16 @@ class L1Bar :
                 day, utc, bcols, ecols = self._read_day(f,lastpx=lastpx)
                 if day is not None :
                     print 'read day ', day, ' ', len(utc), ' bars.', ' has ext:', ecols is not None
-                    if self.dbar is not None:
-                        self._upd_repo(day, utc, bcols, ecols)
-                    lastpx=bcols[-1,5]
-                    if not noret :
-                        darr.append(day)
-                        uarr.append(utc)
-                        barr.append(bcols)
-                        earr.append(ecols)
+                    if len(utc) > 0 :
+                        if self.dbar is not None:
+                            self._upd_repo(day, utc, bcols, ecols)
+                            repo.remove_outlier_lr(self.dbar, day, day)
+                        lastpx=bcols[-1,5]
+                        if not noret :
+                            darr.append(day)
+                            uarr.append(utc)
+                            barr.append(bcols)
+                            earr.append(ecols)
                 else :
                     break
 
@@ -259,6 +261,7 @@ class L1Bar :
             return
         u0 = self.dbar._make_daily_utc(day, self.bar_sec)
         utcix, zix = repo.ix_by_utc(u0, utc, verbose=False)
+
         # write a utc and empty lr in first just to make col_idx in order
         if repo.col_idx('utc') not in ow_cols :
             self.dbar.overwrite([np.vstack((u0, np.zeros(len(u0)))).T], [day], [repo.col_idx(['utc','lr'])], self.bar_sec)
@@ -485,7 +488,14 @@ class L1Bar :
            abs(cols[3]*cols[4]) <= 1e-12 :
             print 'problem with the cols {0}'.format(cols)
             return None
-        return [cols[5] + cols[6], cols[5]-cols[6], cols[3]-cols[2], cols[1], cols[4], (cols[2] + cols[3])/2]
+        bcol=[cols[5] + cols[6], cols[5]-cols[6], cols[3]-cols[2], cols[1], cols[4], (cols[2] + cols[3])/2]
+        if self.venue == 'ETF' :
+            # IB's ETF size round to 100.  update
+            # vol,vbs,bs,as to be consistent with KDB
+            for c in [0,1,3,4] :
+                bcol[c]*=100
+                bcol[c]+=50
+        return bcol
 
     def _ext_cols(self, cols) :
         """
@@ -647,13 +657,13 @@ class L1Bar :
                         if not missing :
                             missing = True
                             marr.append(last_eq)
-                            print 'missing data detected starting on ', datetime.datetime.fromtimestamp(last_eq)
+                            #print 'missing data detected starting on ', datetime.datetime.fromtimestamp(last_eq)
                 else :
                     if missing :
                         missing = False
                         marr.append(u0)
                         miss_arr.append(copy.deepcopy(marr))
-                        print 'missing data end at ', datetime.datetime.fromtimestamp(u0)
+                        #print 'missing data end at ', datetime.datetime.fromtimestamp(u0)
                         marr = []
                     last_ism = ism
                     last_eq = None
@@ -768,7 +778,8 @@ def test_l1(bar_file='bar/20180727/NYM_CL_B1S.csv', hist_load_date = None, symbo
     for bar, bar5, d, ua, ba, ea in zip(bars, bar5s, darr, uarr, barr, earr) :
         verify_lpx_lr_vol_vbs_ism(bar, bar5, ua, ba, ea, d)
 
-bar_dir = [20180629,20180706,20180713,20180720,20180727,20180803,20180810,20180817,20180824,20180907,20180914,20180921,20180928,20181005,20181012,20181019,20181026,20181102,20181109,20181116,20181123,20181207,20181214,20181221,20190104,20190111,20190118,20190125,20190201,20190208,20190215,20190222,20190301,20190308,20190315,20190322]
+#bar_dir = [20180629,20180706,20180713,20180720,20180727,20180803,20180810,20180817,20180824,20180907,20180914,20180921,20180928,20181005,20181012,20181019,20181026,20181102,20181109,20181116,20181123,20181207,20181214,20181221,20190104,20190111,20190118,20190125,20190201,20190208,20190215,20190222,20190301,20190308,20190315,20190322]
+bar_dir = [20180629,20180706,20180713,20180720,20180727,20180803,20180810,20180817,20180824,20180907,20180914,20180921,20180928,20181005,20181012,20181019,20181026,20181102,20181109,20181116,20181123,20181207,20181214,20181221,20190104]
 
 def gzip_everything(bar_path='./bar') :
     os.system('for f in `find ' + bar_path + ' -name *.csv -print` ; do echo "gzip $f" ; gzip -f $f ; done ')
@@ -887,4 +898,15 @@ def get_from_back(sym_arr, sday, eday, repo_l1='./repo_back', repo_hist='./repo'
     recover from backup
     """
     repo.copy_from_repo(sym_arr,repo_path_write=repo_hist, repo_path_read_arr=[repo_l1], bar_sec=1, sday=sday, eday=eday, keep_overnight='no')
+
+def remove_outlier(sym_arr,repo_path, sday, eday) :
+    """
+    sym_arr=['6Z','6M','6R'], front and back
+    """
+    for sym in sym_arr :
+        print sym
+        dbar = repo.RepoDailyBar(sym, repo_path=repo_path)
+        repo.remove_outlier_lr(dbar, sday, eday)
+
+
 
