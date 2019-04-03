@@ -204,17 +204,26 @@ def write_daily_bar(symbol, bar, bar_sec=5, is_front=True, last_close_px=None, g
 
             # remove bars having abnormal return, i.e. circuit break for ES
             # with 9999 prices
-            MaxLR=0.2
+            MaxLR=0.5
+            if l1.is_holiday(day) or l1.is_fx_future(symbol) or l1.venue_by_symbol(symbol)=='FX':
+                MaxLR=5
             ix1=np.nonzero(np.abs(lr)>=MaxLR)[0]
             ix1=np.union1d(ix1,np.nonzero(np.abs(lr_hi)>=MaxLR)[0])
             ix1=np.union1d(ix1,np.nonzero(np.abs(lr_lo)>=MaxLR)[0])
             ix1=np.union1d(ix1,np.nonzero(np.abs(lr_vw)>=MaxLR)[0])
             if len(ix1) > 0 :
-                print 'warning: removing ', len(ix1), 'ticks exceed MaxLR (lr/lo/hi/vw) ', zip(lr[ix1],lr_hi[ix1],lr_lo[ix1],lr_vw[ix1])
-                lr[ix1]=0
-                lr_hi[ix1]=0
-                lr_lo[ix1]=0
-                lr_vw[ix1]=0
+                print 'MaxLR (', MaxLR, ') exceeded: ', len(ix1), ' ticks!'
+                # removing one-by-one
+                for ix1_ in ix1 :
+                    dt = datetime.datetime.fromtimestamp(bar_utc[ix1_])
+                    if not l1.is_pre_market_hour(symbol, dt) :
+                        print 'warning: removing 1 tick lr/lo/hi/vw: ', lr[ix1_],lr_hi[ix1_],lr_lo[ix1_],lr_vw[ix1_]
+                        lr[ix1_]=0
+                        lr_hi[ix1_]=0
+                        lr_lo[ix1_]=0
+                        lr_vw[ix1_]=0
+                    else :
+                        print 'NOT removing 1 tick (pre_market=True: ', symbol, ', ', dt, ') lr/lo/hi/vw: ', lr[ix1_],lr_hi[ix1_],lr_lo[ix1_],lr_vw[ix1_]
 
             # the trade volumes for each bar, fill in zeros for gap
             vlm=bar0[:,7]
@@ -401,6 +410,10 @@ def bar_by_file_ib(fn, symbol, start_day='19980101', end_day='20990101', bar_qt=
     _qt.csv and _trd.csv are expected to exist for the given fn
     return :
     bar_qt[:,0], utc_ltt, bar_qt[:,1:5].T, vwap, vol, vb, vs
+
+    return bar_qt, bar_trd, bar
+    where
+    bar {utc, utcltt, open, high, low, close,vwap,vol,vb,vs}
     """
     bid_ask_spd = get_future_spread(symbol)
     is_fx = l1.venue_by_symbol(symbol) == 'FX'

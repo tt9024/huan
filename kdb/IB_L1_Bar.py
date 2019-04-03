@@ -114,6 +114,7 @@ class L1Bar :
         uarr = []
         barr = []
         earr = []
+
         with open(self.bar_file, 'r') as f:
             lastpx=None
             while True :
@@ -246,13 +247,21 @@ class L1Bar :
                can be filled with zero
         Note 2 lr will be filled by repo automatically.  The overnight lr is 
                lost.
-               TODO : set the overnight lr
+               TODO : set the overnight lr (doig it now)
+
         Note 3 Holidays, may have constant prices and zero volumes
                Don't update the day except:
                1) number of nonzero volumes are more than 1
                2) number of lpx changes are more than 1
                Half days, would be fine
         """
+        b,c,bs=self.dbar.load_day(day)
+        if len(b) != 0 :
+            raise ValueError('copy to non-empty repo! ' + day)
+        if repo.lpxc not in ow_cols :
+            raise ValueError('lpx not in ow_cols! ' + day)
+        if repo.utcc in ow_cols :
+            raise ValueError('utc should not be in ow_cols! Just remove utc from ow_cols ', day)
 
         if len(utc) < 10 or\
            len(np.nonzero(ow_arr[:, 0]               !=0)[0])<=1 or \
@@ -262,9 +271,17 @@ class L1Bar :
         u0 = self.dbar._make_daily_utc(day, self.bar_sec)
         utcix, zix = repo.ix_by_utc(u0, utc, verbose=False)
 
-        # write a utc and empty lr in first just to make col_idx in order
-        if repo.col_idx('utc') not in ow_cols :
-            self.dbar.overwrite([np.vstack((u0, np.zeros(len(u0)))).T], [day], [repo.col_idx(['utc','lr'])], self.bar_sec)
+        lpx=ow_arr[:,repo.ci(ow_cols,repo.lpxc)]
+        lr0=self._get_overnight_lr(day, lpx[0])
+        print 'GOT OVERNIGHT LR: ', lr0
+        if repo.lrc in ow_cols :
+            ow_arr[0,repo.ci(ow_cols, repo.lrc)]=lr0
+        lr=np.r_[lr0, np.zeros(len(u0)-1)]
+
+        # write a utc and the empty lr (with overnight lr0) in first 
+        # just to make col_idx in order.  lr will be updated when 
+        # lpx got updated.
+        self.dbar.overwrite([np.vstack((u0,lr)).T], [day], [repo.col_idx(['utc','lr'])], self.bar_sec)
 
         # basic arr: [vol, vbs, lpx]
         # lpx fwd_bck_fill, others fill 0
@@ -362,6 +379,10 @@ class L1Bar :
 
         # figure out the best time shift (due to collection machine's clock problem) 
         # during 20180530 to 20180818
+        if len(utc) == 0 :
+            print 'nothing foud on ', day, ' for ', self.dbar.symbol, ' ', self.dbar.path
+            return
+
         utc0 = utc[0]
         if utc0 != self._adjust_time(utc0) :
             ## Save the original lpx history for possible second shift adjustments
@@ -408,10 +429,13 @@ class L1Bar :
         # Note: use lr to reconstruct lpx, this could solve the issue
         #########################################################################
         if repo.col_idx('lpx') in col :
-            # check for potential mismatch
-            lpx = bar[utcix, repo.ci(col, repo.col_idx('lpx'))]
-            mid = ow_arr[:, repo.ci(ow_cols,repo.lpxc)]
-            diff = np.abs(np.mean(lpx-mid))
+            diff = 0
+            if l1.is_future(self.symbol) :
+                # check for potential mismatch
+                lpx = bar[utcix, repo.ci(col, repo.col_idx('lpx'))]
+                mid = ow_arr[:, repo.ci(ow_cols,repo.lpxc)]
+                diff = np.abs(np.mean(lpx-mid))
+
             if diff > l1.asset_info(self.symbol)[0] * 5 :
                 #raise ValueError('contract mismatch on '+ day + ' for ' + self.symbol + ' diff ' + str(diff) + ' cnt ' + str(len(mid)))
                 print 'contract mismatch on '+ day + ' for ' + self.symbol + ' diff ' + str(diff) + ' cnt ' + str(len(mid))
@@ -428,6 +452,7 @@ class L1Bar :
         else :
             # we have a day but no lpx in columns, that's an error
             # if this happens a lot, then consider write a new day
+            # and we cannot even recreate lpx based on lr, without lpx0
             print 'ERROR! no lpx on ' + day + ' for ' + self.symbol + ' write as new!'
             self.dbar.remove_day(day)
             self._copy_to_repo(day, utc, ow_arr, ow_cols, upd_arr, upd_cols)
@@ -488,13 +513,14 @@ class L1Bar :
            abs(cols[3]*cols[4]) <= 1e-12 :
             #print 'problem with the cols {0}'.format(cols)
             return None
-        bcol=[cols[5] + cols[6], cols[5]-cols[6], cols[3]-cols[2], cols[1], cols[4], (cols[2] + cols[3])/2]
         if self.venue == 'ETF' :
             # IB's ETF size round to 100.  update
             # vol,vbs,bs,as to be consistent with KDB
-            for c in [0,1,3,4] :
-                bcol[c]*=100
-                bcol[c]+=50
+            for c in [1,4,5,6] :
+                if cols[c] > 0 :
+                    cols[c]*=100
+                    cols[c]+=50
+        bcol=[cols[5] + cols[6], cols[5]-cols[6], cols[3]-cols[2], cols[1], cols[4], (cols[2] + cols[3])/2]
         return bcol
 
     def _ext_cols(self, cols) :
@@ -564,6 +590,50 @@ class L1Bar :
             ext = self._ext_cols(cols)
         return utc, basic, ext
 
+    def _get_overnight_lr(self, day, firstpx) :
+        """
+        This goes to self.dbar to try to get the lastpx of
+        day-1 and calculate lr. 
+        
+        Note 1: 
+        Only do it if the day's contract is consistent. 
+
+        Note 2: 
+        The overnight lr also calculated by
+        IB_hist.  This calculation is meant to be used as a
+        back up in case IB_hist is not available on that day. 
+        Otherwise, always use IB_hist's overnight lr.  The
+        reason is because 'firstpx' here could be delayed
+        but is more reliable in IB_hist. 
+
+        Note 3:
+        The IB_L1 ingestions is meant to be run after 
+        IB_hist ingestion.  And is supposedly to run
+        in order of days.  So dbar should be populated
+        on previous day.
+        """
+        # check the contract
+        tdi=l1.TradingDayIterator(day)
+        tdi.prev()
+        day_prev=tdi.yyyymmdd()
+        if l1.is_future(self.symbol) :
+            ct_today=l1.FC(self.symbol, day)
+            ct_prev = l1.FC(self.symbol,day_prev)
+            if ct_prev != ct_today :
+                print 'IB_L1 Failed Overnight ', self.symbol, day, ' due to contract roll from ', ct_prev, ' to ', ct_today
+                return 0
+
+        # get the lastpx
+        b,c,bs=self.dbar.load_day(day_prev)
+        if len(b) > 0 :
+            lastpx=b[-1,repo.ci(c,repo.lpxc)]
+        else :
+            print 'IB_L1 Failed Overnight ', self.symbol, day, ' no lastpx on previous day ', day_prev, self.dbar.path
+            return 0
+
+        # return lr
+        return np.log(firstpx)-np.log(lastpx)
+
     def _read_day(self, bfp, lastpx=None) :
         """
         day, utc, bcols, ecols = read_next_day(self, bfp)
@@ -588,6 +658,19 @@ class L1Bar :
         same with lastpx.
         lastpx can be last tick of previous day, or in case the
         first day in bar directory, the first px of first day
+
+        Note 3:
+        this lastpx shouldn't be used to calculate the overnight
+        lr.  Use the lastpx on day-1 from dbar instead. 
+        This lastpx is used to filter out leading stuck price.
+        see get_overnight_lr()
+
+        The overnight lr also calculated by
+        IB_hist.  This calculation is meant to be used as a
+        back up in case IB_hist is not available on that day. 
+        Otherwise, always use IB_hist's overnight lr, since it
+        doesn't suffer from start-up late, is contract-file 
+        consistent and works with contract switch days. 
         """
 
         day = None
@@ -784,7 +867,7 @@ bar_dir = [20180629,20180706,20180713,20180720,20180727,20180803,20180810,201808
 def gzip_everything(bar_path='./bar') :
     os.system('for f in `find ' + bar_path + ' -name *.csv -print` ; do echo "gzip $f" ; gzip -f $f ; done ')
 
-def ingest_all_l1(bar_date_dir_list=None, repo_path='./repo', sym_list=None, bar_path='./bar') :
+def ingest_all_l1(bar_date_dir_list=None, repo_path='./repo', sym_list=None, bar_path='./bar', future_inclusion=['front', 'back']) :
     """
     ingest all the symbols in bar_date_dir, including the future, fx, etf and future_nc
     for each *_B1S.csv* file: 
@@ -807,10 +890,13 @@ def ingest_all_l1(bar_date_dir_list=None, repo_path='./repo', sym_list=None, bar
             bar_date_dir_list.append(b0.split('/')[-1])
         print 'got ', len(bar_date_dir_list), ' directories to update'
 
+    bar_date_dir_list.sort()
     for bar_date_dir in bar_date_dir_list :
         fs_front = bar_path+'/'+str(bar_date_dir)+'/*_B1S.csv*'
         fs_back  = bar_path+'/'+str(bar_date_dir)+'/*_B1S_bc.csv*'
-        for fs, rp in zip([fs_front, fs_back], [repo_path, repo_path_nc]) :
+        for fs, rp, contype in zip([fs_front, fs_back], [repo_path, repo_path_nc], ['front','back']) :
+            if contype not in future_inclusion :
+                continue
             fn = glob.glob(fs)
             print 'found ', len(fn), ' files for ', rp
             for f in fn :

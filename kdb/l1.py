@@ -180,6 +180,18 @@ class TradingDayIterator :
             ymd = t.strftime('%Y%m%d')
         return ymd,h_ofst,m_ofst, s_ofst
 
+def is_holiday(yyyymmdd) :
+    mmdd = yyyymmdd[-4:]
+    if mmdd=='0101' or mmdd=='1231' :
+        return True
+    if mmdd=='0703' or mmdd=='0704' :
+        return True
+    if mmdd=='1122' or mmdd=='1123' :
+        return True
+    if mmdd=='1224' or mmdd=='1225' :
+        return True
+    return False
+
 def trd_day(utc=None) :
     """
     get trade day of utc. If none, gets the current day
@@ -205,6 +217,26 @@ def tradinghour(dt) :
     if dt.hour==18 and dt.minute==0 :
         return False
     return True
+
+def is_pre_market_hour(symbol, dt) :
+    """
+    true if symbol is ETF or stock 
+         and dt is a trading day
+         and time of day is between [08:00:00,09:30:00]
+                                or  [16:00:00,17:00:00]
+    false otherwise. 
+    Currently this is used in IB_hist and IB_L1 to
+    for ETF to NOT filter out the outliers.
+    """
+    if dt.weekday() <= 4 :
+        if venue_by_symbol(symbol) == 'ETF' :
+            if dt.hour >= 8 and (dt.hour <9 or dt.hour==9 and dt.minute<30) :
+                return True
+            if dt.hour == 16 :
+                if dt.minute>0 or dt.second>0 :
+                    return True
+    return False
+           
 
 MonthlyFrontContract =    ['G','H','J','K','M','N','Q','U','V','X','Z','F']
 BiMonthlyFrontContract =  ['G','J','J','M','M','Q','Q','V','V','Z','Z','G']
@@ -356,6 +388,19 @@ def get_start_end_hour(symbol) :
     #default Future and FX hours
     return -6, 17
 
+def get_start_end_minutes(symbol) :
+    """
+    This is helper function to previous get_start_end_hour(symbol)
+    default to be 0 minutes, but some ETF and/or EUX symbols, 
+    such as EZU, prices from 9:10 to 9:30 swings widely.
+    should be set to avoid garbage premarket prices
+    """
+    # some ETF symbol that had bad pre-market prices
+    if symbol in ['EZU','ITB','KRE','RSX','SPY','UGAZ'] :
+        return [30, 0]
+    return [0, 0]
+
+
 def asset_info(sym) :
     """
     returns the tick size and contract size of symbol
@@ -373,6 +418,9 @@ def asset_info(sym) :
 ## Adding should not be a problem
 ## check with ib/kisco/ibbar.py, it uses the above two functions for live
 ##########################################################################
+
+def is_future(symbol) :
+    return venue_by_symbol(symbol) in future_venues
 
 def is_fx_future(symbol) :
     return symbol in FXFutures

@@ -576,8 +576,11 @@ class RepoDailyBar :
         if match_barsec is not None then only remove the day if
         the existing barsec matches with match_barsec
         """
+        bar, col, bs = self.load_day(day)
+        if len(bar) == 0 :
+            print day, ' not exist... no need to remove'
+            return
         if match_barsec is not None:
-            bar, col, bs = self.load_day(day)
             if bs != match_barsec :
                 print 'barsec not matched, day not removed!'
                 return
@@ -601,6 +604,17 @@ class RepoDailyBar :
         get all the days in the repo
         """
         return self.idx['daily'].keys()
+
+    def upd_overnight_lr(self, day, lr0) :
+        """
+        just update the lr[0]
+        """
+        b, c, bs = self.load_day(day)
+        if len(b) > 0 and lrc in c :
+            b[0,ci(c,lrc)]=lr0
+            self._dump_day(day, b,c,bs)
+        else :
+            print 'upd_overnight_lr: ', day, ' not exist or lr not in ', c
 
     def _dump_day(self, day, bar, col, bar_sec) :
         """
@@ -977,7 +991,7 @@ def copy_from_repo(symarr, repo_path_write='./repo', repo_path_read_arr=['./repo
         tdi.next()
         d=tdi.yyyymmdd()
 
-def remove_outlier_lr(dbar, sday, eday, outlier_mul=200) :
+def remove_outlier_lr(dbar, sday, eday, outlier_mul=500) :
     tdi=l1.TradingDayIterator(sday)
     d=tdi.yyyymmdd()
     while d <= eday :
@@ -993,8 +1007,18 @@ def remove_outlier_lr(dbar, sday, eday, outlier_mul=200) :
                 if len(ix0) > 0 :
                     print 'outlier ', len(ix0), ' ticks!'
                     ix0=ix[ix0]
-                    dbar._delete_rows(b,c,ix0)
+                    t=b[:,ci(c,utcc)]
+                    ix1=[]
+                    for ix0_ in ix0 :
+                        dt=datetime.datetime.fromtimestamp(t[ix0_])
+                        if not l1.is_pre_market_hour(dbar.symbol, dt) :
+                            ix1.append(ix0_)
+                        else :
+                            print 'NOT removing 1 tick (pre_market=True: ', dbar.symbol, ', ', dt
+
+                    dbar._delete_rows(b,c,ix1)
                     # remove lpx and overwrite the day
+                    # to be reconstructed from lr
                     if lpxc in c :
                         b=np.delete(b,ci(c,lpxc),axis=1)
                         c.remove(lpxc)
