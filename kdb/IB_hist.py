@@ -857,4 +857,34 @@ def ingest_all_symb(sday, eday, repo_path=None, get_missing=True, sym_list = Non
             dbar = repo.RepoDailyBar(sym, repo_path = repo_path_nc, create=True)
             gen_daily_bar_ib(sym, sday, eday, barsec, dbar_repo = dbar, is_front_future=False, get_missing = get_missing, overwrite_dbar=overwrite_dbar, EarliestMissingDay=EarliestMissingDay)
 
+def weekly_get_ingest(start_end_days=None, repo_path='repo_hist', rsync_dir_list=None) :
+    """
+    This is supposed to be run on IB machine at EoD Friday.
+    It first gets all the history of this week, and then ingest
+    into a hist_repo.  The need for ingestion, is to correct
+    on any missing data.  After this run, the files in the hist dir
+    is copied to data machine
+    """
+    import ibbar
+    if start_end_days is None:
+        cdt = datetime.datetime.now()
+        if cdt.weekday() != 4 :
+            raise ValueError('sday not set while running on non-friday!')
+        eday = dt.strftime('%Y%m%d')
+        tdi = l1.TradingDayIterator(eday)
+        sday=tdi.prev_n_trade_day(5).yyyymmdd()
+    else :
+        sday, eday = start_end_days
+
+    print 'Got start/end day: ', sday, eday
+    ibbar.weekly_get_hist(sday, eday)
+
+    #No need to do this, unless the previous get failed. But
+    #then it should be tried again.
+    #ingest_all_symb(sday, eday, repo_path=repo_path)
+    hist_path = ibbar.read_config('HistPath')
+    if rsync_dir_list is not None :
+        for rsync_dir in rsync_dir_list :
+            if len(rsync_dir) > 0 :
+                os.system('rsync -avz ' + hist_path + '/ ' + rsync_dir)
 
