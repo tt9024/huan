@@ -1084,3 +1084,27 @@ def plot_repo(repo_path_arr, symbol_arr, sday, eday, bsarr=None, plotdt=True) :
         pl.gcf().autofmt_xdate()
         pl.legend(loc='best')
 
+def plot_weekly(wbar, axlr, axvbs, label='', dt=None) :
+    """
+    wbar is in shape of [week, bar, col]
+    """
+
+    v=[]
+    for c in [1,3] :
+        lr=wbar[:,:, c]
+        s=np.std(lr, axis=1)
+        m=np.mean(lr, axis=1)
+        lr=lr.T-m
+        lr/=s
+        lr=lr.T
+        lr0=np.sum(lr,axis=0)/lr.shape[0]
+        v.append(lr0.copy())
+
+    if dt is None :
+        dt=[]
+        for d in wbar[-1, :,0] :
+            dt.append(datetime.datetime.fromtimestamp(d))
+
+    axlr.plot(dt, np.cumsum(v[0]), label=label)
+    axvbs.plot(dt, np.cumsum(v[1]), label=label)
+    axlr.legend() ; axvbs.legend();

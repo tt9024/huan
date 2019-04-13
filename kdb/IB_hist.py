@@ -336,6 +336,7 @@ def get_trd (fntd) :
     try :
         fn=get_gzip_filename(fntd)
         print 'reading trd ', fntd, fn
+        os.system('chmod u+rw ' + fn)
         bar_trd=np.genfromtxt(fn, delimiter=',',usecols=[0,1,2,3,4,5,6,7]) #,dtype=[('utc','i8'),('open','<f8'),('high','<f8'),('low','<f8'),('close','<f8'),('vol','i8'),('cnt','i8'),('wap','<f8')])
     except :
         print 'no trade for ', fn
@@ -346,8 +347,11 @@ def get_qt(fnqt) :
     try :
         fn=get_gzip_filename(fnqt)
         print 'reading quote ', fnqt, fn
+        os.system('chmod u+rw ' + fn)
         bar_qt=np.genfromtxt(fn, delimiter=',',usecols=[0,1,2,3,4]) #, dtype=[('utc','i8'),('open','<f8'),('high','<f8'),('low','<f8'),('close','<f8')])
     except :
+        import traceback
+        traceback.print_exc()
         print 'no quotes for ', fn
         bar_qt = []
     return bar_qt
