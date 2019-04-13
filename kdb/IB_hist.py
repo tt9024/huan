@@ -874,7 +874,7 @@ def weekly_get_ingest(start_end_days=None, repo_path='repo_hist', rsync_dir_list
         cdt = datetime.datetime.now()
         if cdt.weekday() != 4 :
             raise ValueError('sday not set while running on non-friday!')
-        eday = dt.strftime('%Y%m%d')
+        eday = cdt.strftime('%Y%m%d')
         tdi = l1.TradingDayIterator(eday)
         sday=tdi.prev_n_trade_day(5).yyyymmdd()
     else :
