@@ -886,7 +886,7 @@ def weekly_get_ingest(start_end_days=None, repo_path='repo_hist', rsync_dir_list
     #No need to do this, unless the previous get failed. But
     #then it should be tried again.
     #ingest_all_symb(sday, eday, repo_path=repo_path)
-    hist_path = ibbar.read_config('HistPath')
+    hist_path = ibbar.read_cfg('HistPath')
     if rsync_dir_list is not None :
         for rsync_dir in rsync_dir_list :
             if len(rsync_dir) > 0 :
