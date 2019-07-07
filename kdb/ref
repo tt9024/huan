@@ -1,0 +1,28 @@
+State Space Model
+
+https://www.it.uu.se/edu/course/homepage/systemid/vt13/ch9.pdf
+Good examples, and easy to follow lecture notes from spain
+
+
+
+
+
+
+SVD
+
+* http://www-cgi.cs.cmu.edu/afs/cs.cmu.edu/user/lafferty/www/pdfs/sigir469-yu.pdf  
+pPCA a non-parametric method, but is not easy to follow the pPCA setup. 
+
+* https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.68.1154&rep=rep1&type=pdf
+Collaborative Filtering SVD filling missing values
+
+* https://statweb.stanford.edu/~tibs/sta306bfiles/Defense.pdf
+SVD penalization L1/L2 and CF
+
+Probability
+
+* http://www-library.desy.de/preparch/books/vstatmp_engl.pdf
+* MPP lecture notes
+* stoctrl
+
+

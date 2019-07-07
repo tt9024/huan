@@ -61,7 +61,7 @@ def Xlr(wb5m) :
     #X=np.vstack((fd0,fd1,fd2,fd3,fd4,fd11,fd14,fd15)).T  # it seems that Monday,Thursday and Friday has the best
     return X.copy()
 
-def getYTrain(wb5m,y0=-60,y1=-30,wt_decay=0.1,fd=None) :
+def getYTrain(wb5m,y0=-42,y1=-30,wt_decay=0.1,fd=None) :
     if fd is not None:
         y=fd.copy()
     else :
@@ -73,7 +73,7 @@ def getYTrain(wb5m,y0=-60,y1=-30,wt_decay=0.1,fd=None) :
     y0=ean.outlier(y,mu,sd,in_th=1,out_th=3)
     return y0, mu, sd
 
-def getYTest(wb5m,mu,sd,y0=-60,y1=-30,fd=None) :
+def getYTest(wb5m,mu,sd,y0=-42,y1=-30,fd=None) :
     if fd is not None:
         y=fd.copy()
     else :
@@ -170,8 +170,8 @@ def getXTrain(wb5m,y0=-60,y1=-30,wt_decay=0.1,fd=None) :
     X2=Xvbs(wb5m[:,:,3])
     Y0,mu,sd=getYTrain(wb5m,y0=y0,y1=y1,wt_decay=wt_decay,fd=fd)
     X3=YprevTrain(Y0)
-    #X=np.vstack((X1.T,X2.T,X3.T)).T
-    X=np.vstack((X1.T,X3.T)).T
+    X=np.vstack((X1.T,X2.T,X3.T)).T
+    #X=np.vstack((X1.T,X3.T)).T
     #X=np.vstack((X1.T,X2.T,X3.T,(X1[:,6]*X2[:,0]).T)).T
 
     #X=X1.copy()
@@ -188,8 +188,8 @@ def getXTest(wb5m,Ytrain,xmu,xsd,ymu,ysd,y0=-60,y1=-30,fd=None) :
     X2=Xvbs(wb5m[:,:,3])
     Y0=getYTest(wb5m,ymu,ysd,y0=y0,y1=y1,fd=fd)
     X3=YprevTest(Y0,Ytrain)
-    #X=np.vstack((X1.T,X2.T,X3.T)).T
-    X=np.vstack((X1.T,X3.T)).T
+    X=np.vstack((X1.T,X2.T,X3.T)).T
+    #X=np.vstack((X1.T,X3.T)).T
     #X=np.vstack((X1.T,X2.T,X3.T,(X1[:,6]*X2[:,0]).T)).T
 
     #X=X1.copy()
@@ -740,14 +740,16 @@ def eval_roll0(wb5m, hist, roll, train_wt_decay, clf, feat_select, train_ix0=400
     max_coef=23
     xmuarr=[]
     xstdarr=[]
-    for i in np.arange(k) :
+    for i in np.arange(k+1) :
+    #for i in np.arange(k) :
         if hist==-1 :
             ix0=0
         else :
             ix0=train_ix0+i*roll-hist
         ix1=train_ix0+i*roll
         #print ix0, ix1
-        X0, Y0, X1, Y1, yh0, omp, coefix, xmu, xstd=rollY(wb5m,np.arange(ix0,ix1), np.arange(ix1,ix1+roll),clf,train_wt_decay=train_wt_decay,feat_select=feat_select,fit_sign=fit_sign)
+        #X0, Y0, X1, Y1, yh0, omp, coefix, xmu, xstd=rollY(wb5m,np.arange(ix0,ix1), np.arange(ix1,ix1+roll),clf,train_wt_decay=train_wt_decay,feat_select=feat_select,fit_sign=fit_sign)
+        X0, Y0, X1, Y1, yh0, omp, coefix, xmu, xstd=rollY(wb5m,np.arange(ix0,ix1), np.arange(ix1,min(ix1+roll,n)),clf,train_wt_decay=train_wt_decay,feat_select=feat_select,fit_sign=fit_sign)
         c0=np.zeros(max_coef)
         if not fit_sign :
             c0[coefix]=omp.coef_
