@@ -1,0 +1,84 @@
+State Space Model 
+* https://www.it.uu.se/edu/course/homepage/systemid/vt13/ch9.pdf
+Good examples, and easy to follow lecture notes from spain
+
+
+* https://www.hindawi.com/journals/aaa/2013/824641/
+Advanced math for solving stein equatio and smith doubling
+
+* 0411.pdf 
+Advanced math for using Fisher Informatio matrix to connect ARMAX and Stein Equation
+
+* http://web.mit.edu/2.14/www/Handouts/StateSpace.pdf
+Description of State Space Model LTI.  Not identification
+
+* https://www.stat.pitt.edu/stoffer/tsa4/Chapter6.pdf 
+Intro Book State Space with ARMAX, with different, ugly, notatios
+Isn't that moving homogenous diff eq to inhomogenous diff eq (with input)?
+Releated with the 18.03
+
+* tsa_chapter6.pdf
+Book TSA's state space chapter
+
+Hawkes Process
+
+* http://mathworld.wolfram.com/HawkesProcess.html 
+Hawkes process intro
+
+* https://hawkeslib.readthedocs.io/en/latest/tutorial.html 
+Hawkes comparison with Poison process, numpy examples
+
+* HawkesCourseSlides.pdf
+also http://lamp.ecp.fr/MAS/fiQuant/ioane_files/HawkesCourseSlides.pdf
+
+* euclid.jap.1318940477.pdf
+good introduction for applying hawke for financial
+
+* hawks_estimatin.pdf
+non-parametic estimation w.r.t. finiancial data, kernel estimation
+
+
+
+Trading
+* dob_shortterm2012.pdf 
+Good study on using Dow-30 stocks Dob for 0.1 second mid prediction. Check Setups
+
+* hawkes_dob.pdf 2017
+Good survey recent paper 2017, interesting conditional prob on order stats
+
+* hawkes_es_mid.pdf
+* hawkes_high_freq.pdf
+Talked about the data preparation of hawkes fitting
+
+* finincial time series (Tsey book + https://faculty.chicagobooth.edu/ruey.tsay/teaching/uts/)
+Financial time series.
+
+* http://lamp.ecp.fr/MAS/fiQuant/ioane_files/
+Some latest research on limit order book, useful root for reference following
+
+
+Math (Optimizatization and Probability)
+
+* http://faculty.uml.edu/cbyrne/optfirst0.pdf
+Gentle starting point and a good quick review
+
+
+
+SVD
+
+* http://www-cgi.cs.cmu.edu/afs/cs.cmu.edu/user/lafferty/www/pdfs/sigir469-yu.pdf  
+pPCA a non-parametric method, but is not easy to follow the pPCA setup. 
+
+* https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.68.1154&rep=rep1&type=pdf
+Collaborative Filtering SVD filling missing values
+
+* https://statweb.stanford.edu/~tibs/sta306bfiles/Defense.pdf
+SVD penalization L1/L2 and CF
+
+Probability
+
+* http://www-library.desy.de/preparch/books/vstatmp_engl.pdf
+* MPP lecture notes
+* stoctrl
+
+
