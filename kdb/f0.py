@@ -71,6 +71,18 @@ def f3(p0,dn,ifp,ax=None, ax2=None) :
     d=getattr(scipy.stats,dn)
     param = d.fit(p)
     b=len(p)/20
+
+    # need inverse cdf! 
+    p.sort()
+    c=d.cdf(p,*param[-2],loc=param[-2],scale=param[-1])
+    n=len(p)
+    tk=np.linspace(c[0],c[-1],int((c[-1]-c[0])/(float(20)/float(n))))
+    ix=np.searchsorted(c,tk)
+
+
+
+
+
     cnt,bv=np.histogram(p,bins=b)
     c1=d.cdf(bv[1:], *param[:-2], loc=param[-2], scale=param[-1])
     c2=d.cdf(bv[:-1], *param[:-2], loc=param[-2], scale=param[-1])
@@ -79,6 +91,7 @@ def f3(p0,dn,ifp,ax=None, ax2=None) :
     pp=c1-c2
     E=pp*len(p)
     cs=np.sum((cnt.astype(float)-E)**2/E)
+
     chi2=scipy.stats.chi2.cdf(cs,df=len(p)-1)
     if ifp:
         if ax is None :
