@@ -1074,8 +1074,8 @@ def plot_repo(repo_path_arr, symbol_arr, sday, eday, bsarr=None, plotdt=True) :
              
                 ax1.plot(dt, lpx, label=rpstr)
                 ax2.plot(dt, np.cumsum(lr), label=rpstr)
-                ax3.plot(dt, np.cumsum(vbs), label=rpstr)
-                ax3.plot(dt, np.cumsum(vol), label=rpstr)
+                ax3.plot(dt, np.cumsum(vbs), label=rpstr+" vbs")
+                ax3.plot(dt, np.cumsum(vol), label=rpstr+" vol")
             except :
                 import traceback
                 traceback.print_exc()
