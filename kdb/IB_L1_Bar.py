@@ -138,7 +138,7 @@ class L1Bar :
             os.system('gzip -f ' + self.bar_file)
         return darr, np.array(uarr), np.array(barr), np.array(earr)
 
-    def _best_shift_multi_seg(self, lpx_hist0, lpx_mid0, startix=0, endix=-1, verbose = True) :
+    def _best_shift_multi_seg(self, lpx_hist0, lpx_mid0, startix=0, endix=-1, verbose = True, order = 2) :
         """
         This is similar (and uses) _best_shift(), but it tries to detect
         if the shift changes during a day, which (I don't know why) happens
@@ -158,15 +158,16 @@ class L1Bar :
 
         if verbose :
             print 'checking %d - %d'%(startix, endix)
-        sh0 = self._best_shift(lpx_hist, lpx_mid, order=0, verbose=verbose)
+        sh0 = self._best_shift(lpx_hist, lpx_mid, order=order, verbose=verbose)
         MINSAMPLE = 300
         if thiscnt < MINSAMPLE :
             return [[startix, endix]], [sh0]
 
         # divide equally and find shift for both segments
+
         cnt = thiscnt/2
-        sh1 = self._best_shift(lpx_hist[:cnt], lpx_mid[:cnt], order=0, select_margin=0.5, verbose=verbose)
-        sh2 = self._best_shift(lpx_hist[cnt:], lpx_mid[cnt:], order=0, select_margin=0.5, verbose=verbose)
+        sh1 = self._best_shift(lpx_hist[:cnt], lpx_mid[:cnt], order=order, select_margin=0.2, verbose=verbose)
+        sh2 = self._best_shift(lpx_hist[cnt:], lpx_mid[cnt:], order=order, select_margin=0.2, verbose=verbose)
         if verbose :
             print '<<< ', startix, ', ', startix+cnt, ', ', sh1
             print '>>> ', startix+cnt, ', ', endix, ', ', sh2
@@ -192,20 +193,42 @@ class L1Bar :
             print '!!! ', ix1+ix2, sh1+sh2
         return ix1+ix2, sh1+sh2
 
-    def _best_shift(self, lpx_hist, lpx_mid, order=0.5, select_margin=None, verbose=False) :
+    def _best_shift_linspace(self, lpx_hist, lpx_mid, segments = 1000, order = 2, verbose=False) :
+        """
+        This is simlar with above, except it uses a fixed interval to check
+        """
+        totcnt = len(lpx_hist)
+        MINSAMPLE = max(1800, totcnt/segments)
+        if totcnt < MINSAMPLE :
+            return np.array([[0,totcnt]]), np.array([0])
+        segs = int(totcnt/MINSAMPLE)
+        ix = (np.linspace(0,totcnt, segs+1)+0.5).astype(int)
+
+        ixarr = []
+        sharr=[]
+        for lb, ub in zip(ix[:-1], ix[1:]) :
+            sh = self._best_shift(lpx_hist[lb:ub], lpx_mid[lb:ub], order=order, select_margin=0.2, verbose=verbose)
+            ixarr.append([lb,ub])
+            sharr.append(sh)
+
+        return np.array(ixarr), np.array(sharr)
+
+    def _best_shift(self, lpx_hist, lpx_mid, order=2, select_margin=None, verbose=False) :
         # lpx_hist is the lpx from IB_hist, with correct clock shift
         # lpx_mid is the lpx after the overwritten by Bar_L1's mid, with clock skew
         # returns the best shift base on the MSE
         # order is the exponent to the absolute of difference, default squre root to
         #       put more focus on consistent difference while avoid noise during breakout
         #       set order = 0 to count exact matching points
-        # if select_margin is not None, True, then the best has to be this much better than the second
+        #       set order = 2 to get square root of MSE
+        # if select_margin is not None, a fraction, then the best has to be this much better than the second
         #       by the fraction of the value or if both are very small
         # NOTE: this shift matches the lpx_mid's shift, when adjusting, 
         # it should be componsated, i.e. use negative of shift to apply to utc
         assert len(lpx_hist) == len(lpx_mid), 'lpx_hist and lpx_mid length mismatch'
-        sharr=np.array([-2, -1,0,1, 2])
-        stsh = 5
+        #sharr=np.array([-4, -3, -2, -1,0,1, 2, 3, 4])
+        sharr=np.array([-1,0,1])
+        stsh =len(sharr)
         ixnz=np.nonzero(np.abs(lpx_hist[1:]-lpx_hist[:-1])>1e-10)[0]
         nzc=len(ixnz)
         if nzc < 2*stsh+10 :
@@ -221,6 +244,8 @@ class L1Bar :
                 mct = np.nonzero(absdiff > 1e-10)[0]
                 #v = float(len(mct))/float(len(absdiff))
                 v = float(len(mct))/float(nzc)
+            elif order == 2:
+                v=np.sqrt(np.mean(absdiff**order))
             else :
                 v=np.mean(absdiff**order)
             mse.append(v)
@@ -232,8 +257,8 @@ class L1Bar :
         if select_margin is not None:
             v0 = mse[ix[0]]
             v1 = mse[ix[1]]
-            if v0 > 1e-10 and (v1-v0)/v0 < select_margin :
-                return np.nan
+            if v0 > 1e-5 and (v1-v0)/v0 < select_margin :
+                return 0
 
         return sharr[ix[0]]
         
@@ -263,9 +288,13 @@ class L1Bar :
         if repo.utcc in ow_cols :
             raise ValueError('utc should not be in ow_cols! Just remove utc from ow_cols ', day)
 
+        if not l1.is_trading_day(day) :
+            print 'skipping ', len(utc), ' bars on weekend ', day
+            return
+
         if len(utc) < 10 or\
            len(np.nonzero(ow_arr[:, 0]               !=0)[0])<=1 or \
-           len(np.nonzero(ow_arr[1:, 2]-ow_arr[:-1,2]!=0)[0])<=1 :
+           len(np.nonzero(ow_arr[1:, 3]-ow_arr[:-1,3]!=0)[0])<=1 :
             print day, ' has too few updates, skipping '
             return
         u0 = self.dbar._make_daily_utc(day, self.bar_sec)
@@ -304,7 +333,7 @@ class L1Bar :
                 repo.fwd_bck_fill(upd_arr0[:, ix[0]], v=0)
         self.dbar.overwrite([upd_arr0], [day], [upd_cols], self.bar_sec)
 
-    def _upd_repo(self, day, utc, bcols, ecols) :
+    def _upd_repo(self, day, utc, bcols, ecols, check_clock_shift = True) :
         """
         update day to the daily bar repo
         overwrite the vol and vbx, also the lr based lr (see NOTES)
@@ -315,8 +344,11 @@ class L1Bar :
         ecol_arr: array of extended columns for each day
                  ['qbc', 'qac', 'tbc', 'tsc', 'ism1']
 
-        ow_col: ['vol', 'vbs', 'lpx']
+        ow_col: ['lr', 'vol', 'vbs', 'lpx']
         upd_col:['spd','bs','as','qbc','qac','qbc','tbc','tsc','ism1']
+        check_clock_shift: run the MSE fitting between bar with IB history.
+                          Due to clock drift on Kisco, there may be some
+                          on bars.  Take IB history as reference. 
 
         Note 1:
         There are 1~2 second drift on the hist's mid and L1's mid.
@@ -383,41 +415,62 @@ class L1Bar :
             print 'nothing foud on ', day, ' for ', self.dbar.symbol, ' ', self.dbar.path
             return
 
+        # Bar data in 2020 should be applied to shift check
         utc0 = utc[0]
-        if utc0 != self._adjust_time(utc0) :
+
+        #if utc0 != self._adjust_time(utc0) :
+        if check_clock_shift :
             ## Save the original lpx history for possible second shift adjustments
             lpx_hist = bar[:, repo.ci(col, repo.col_idx('lpx'))]
-            ixa, sha = self._best_shift_multi_seg(lpx_hist[utcix], mid, verbose = False)
-            print 'got shift of ', ixa, -np.array(sha),  ', reapply and overwrite!'
-            for ix, shift in zip(ixa, sha) :
-                if shift != 0 :
-                    utc[ix[0]:ix[1]]-=shift
 
-            # need to make sure the utc monotically increase, update ow_arr and upd_arr
-            inc_ix = l1.get_inc_idx2(utc, time_inc=True)
-            if len(inc_ix) != len(utc) :
-                print 'got ', len(inc_ix), ' increasing utc out of ', len(utc)
-                utc=utc[inc_ix]
-                ow_arr=ow_arr[inc_ix,:]
-                upd_arr=upd_arr[inc_ix,:]
+            # debug the shift code
+            repeat = 3
+            for r in np.arange(repeat) :
+                #ixa, sha = self._best_shift_multi_seg(lpx_hist[utcix], mid, verbose = False)
+                #debug
+                #return u0, lpx_hist, utc, mid, utcix
 
-            # readjust the utcix and zix
-            utcix, zix = repo.ix_by_utc(u0, utc, verbose=False)
-            if len(zix) != len(utc) :
-                print 'removing ix after adjusting utc, ',
-                print 'some ix moved out of daily utc: len(utc)=%d, len(zix)=%d'%(len(utc), len(zix))
-                utc=utc[zix]
-                ow_arr=ow_arr[zix, :]
-                upd_arr=upd_arr[zix,:]
+                ixa, sha = self._best_shift_linspace(lpx_hist[utcix], mid, segments = 500)
+                print 'Iteration ', r+1, ' got shift of ', -np.array(sha),  ', reapply and overwrite (', len(sha), ')!'
+                if np.max(np.abs(sha)) == 0 :
+                    print 'no shifts detected, all good!'
+                    break
+                for ix, shift in zip(ixa, sha) :
+                    if shift != 0 :
+                        utc[ix[0]:ix[1]]-=shift
 
-            """
-            ixbad = np.nonzero( utc[1:]-utc[:-1] < 1)[0]
-            if len(ixbad) > 0 :
-                print 'removing duplicated ix ', ixbad
-                utc=np.delete(utc, ixbad)
-                ow_arr = np.delete(ow_arr, ixbad, axis=0)
-                upd_arr = np.delete(upd_arr, ixbad, axis=0)
-            """
+                # need to make sure the utc monotically increase, update ow_arr and upd_arr
+                inc_ix = l1.get_inc_idx2(utc, time_inc=True)
+                if len(inc_ix) != len(utc) :
+                    print 'got ', len(inc_ix), ' increasing utc out of ', len(utc)
+                    utc=utc[inc_ix]
+                    mid=mid[inc_ix]
+                    ow_arr=ow_arr[inc_ix,:]
+                    upd_arr=upd_arr[inc_ix,:]
+
+                # readjust the utcix and zix
+                utcix, zix = repo.ix_by_utc(u0, utc, verbose=False)
+                # utcix has length of the regularized bar mid, each with index of repo's regular utc
+                # zix has the same length, each with index of input bar mid
+                if len(zix) != len(utc) :
+                    print 'removing ix after adjusting utc, ',
+                    print 'some ix moved out of daily utc: len(utc)=%d, len(zix)=%d'%(len(utc), len(zix))
+                    utc=utc[zix]
+                    mid=mid[zix]
+                    ow_arr=ow_arr[zix, :]
+                    upd_arr=upd_arr[zix,:]
+
+                """
+                ixbad = np.nonzero( utc[1:]-utc[:-1] < 1)[0]
+                if len(ixbad) > 0 :
+                    print 'removing duplicated ix ', ixbad
+                    utc=np.delete(utc, ixbad)
+                    ow_arr = np.delete(ow_arr, ixbad, axis=0)
+                    upd_arr = np.delete(upd_arr, ixbad, axis=0)
+                """
+
+            #debug
+            #return utc, mid, utcix, u0, lpx_hist
         #self.dbar.overwrite([ow_arr[1:, :]], [day], [ow_cols], self.bar_sec, utcix=[utc[1:]])
 
         #########################################################################
@@ -458,6 +511,15 @@ class L1Bar :
             self._copy_to_repo(day, utc, ow_arr, ow_cols, upd_arr, upd_cols)
             return
 
+        # ['vol','vbs'] need to fill with zero on skips.
+        # This is needed as we see only the BAR vol. The IB History's trade is 
+        # not observable and should avoid. 
+        # May come back and revisit if there are usefulness on those data
+        zf_cols = repo.col_idx(['vol','vbs'])
+        self.dbar.clear_cols(day, zf_cols, self.bar_sec)
+
+        # This is to NOT to update the first bar, which is the overnight lr from
+        # last close lpx, this is done in IB History
         ix0=1 if utcix[0]==0 else 0
         self.dbar.overwrite([ow_arr[ix0:, :]], [day], [ow_cols], self.bar_sec, rowix=[utcix[ix0:]])
 

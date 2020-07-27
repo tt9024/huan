@@ -616,6 +616,21 @@ class RepoDailyBar :
         else :
             print 'upd_overnight_lr: ', day, ' not exist or lr not in ', c
 
+    def clear_cols(self, day, cols, bar_sec) :
+        """
+        fill col with zeros on day
+        """
+        assert utcc not in cols, "cannot clear the utc field"
+        b, c, bs = self.load_day(day)
+        assert bs == bar_sec, "cannot clear cols because bar second does not match"
+        for c0 in cols :
+            if c0 in c :
+                 b[:,ci(c, c0)]=0
+            else :
+                 print "col ", c0, " not found in bar of ", day
+        self._dump_day(day, b, c, bar_sec)
+
+
     def _dump_day(self, day, bar, col, bar_sec) :
         """
         update self.index

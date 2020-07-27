@@ -192,6 +192,10 @@ def is_holiday(yyyymmdd) :
         return True
     return False
 
+def is_trading_day(yyyymmdd) :
+    dt = datetime.datetime.strptime(yyyymmdd,'%Y%m%d')
+    return dt.weekday() < 5 and not is_holiday(yyyymmdd)
+
 def trd_day(utc=None) :
     """
     get trade day of utc. If none, gets the current day
