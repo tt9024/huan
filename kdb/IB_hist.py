@@ -40,7 +40,12 @@ def write_daily_bar(symbol, bar, bar_sec=5, is_front=True, last_close_px=None, g
     Output: 
     array of daily_bar for each day covered in the bar (hist file)
     Each daily_bar have the following format: 
-    [obs_utc, lr, lr_hi, lr_low, lr_vwap, volume, vbs, ltt, lpx] 
+    [obs_utc, lr, trd_vol, vbs, lrhl, lrvwap, ltt, lpx]
+    where: 
+        obs_utc is the checking time stamp
+        lr is the log return between this checking price and last checking price
+           i.e. the lr of the previous bar that ended at this checking time (obs_utc)
+
       (May extend in the future)
     Note that the Trading Hours set to 24 for ICE hours
     In addition, it does the following:
