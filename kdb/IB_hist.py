@@ -130,6 +130,8 @@ def write_daily_bar(symbol, bar, bar_sec=5, is_front=True, last_close_px=None, g
         if j-i<N*0.90 :
             if symbol in ['LE','HE'] or l1.venue_by_symbol(symbol)=='IDX' :
                 bar_good = (j-i)>N*0.75
+            elif not is_front :
+                bar_good = (j-i)>N*0.5
             else :
                 bar_good=False
 
@@ -733,6 +735,10 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
     tda_bad = list(set(tda_bad))
     tda_bad.sort()
 
+    # The following gets the days that are either in tda nor in 
+    # tda_bad, i.e. some missing days not found in any history files
+    # todo - this shouldn't happen and most probably due to the 
+    # half day/holidays, should remove
     if len(tda) == 0 :
         print 'NOTHING found! Not getting any missing days!'
     # in case there are some entirely missed days
