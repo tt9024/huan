@@ -293,7 +293,7 @@ class RepoDailyBar :
             np.savez_compressed(self.idxfn, idx=bootstrap_idx)
 
         try :
-            self.idx = np.load(self.path+'/idx.npz')['idx'].item()
+            self.idx = np.load(self.path+'/idx.npz', allow_pickle=True)['idx'].item()
         except Exception as e:
             if create :
                 os.system('mkdir -p '+self.path)
@@ -441,7 +441,7 @@ class RepoDailyBar :
             self._dump_day(d, rb, col, bs)
             sync_lr_lpx(self, d, upd_col=c)
 
-    def daily_bar(self, start_day, day_cnt, bar_sec, end_day=None, cols=[utcc,lrc,volc,vbsc,lpxc], group_days = 5) :
+    def daily_bar(self, start_day, day_cnt, bar_sec, end_day=None, cols=[utcc,lrc,volc,vbsc,lpxc], group_days = 5, verbose=False) :
         """
         return 3-d array of bars for specified period, with bar period, column, 
         grouped by days (i.e.e daily, weekly, etc)
@@ -453,7 +453,7 @@ class RepoDailyBar :
         group_days: first dimension of the 3-d array, daily: 1, weekly=5, etc
         """
         if end_day is not None :
-            print 'end_day not null, got ',
+            #print 'end_day not null, got ',
             ti=l1.TradingDayIterator(start_day)
             day_cnt=0
             day=ti.yyyymmdd()
@@ -490,23 +490,24 @@ class RepoDailyBar :
             print '( Warning! group_days ' + str(group_days) + ' not multiple of ' + str(day_cnt) + ' adjustint...)', 
             day_cnt = day_cnt/group_days * group_days
             start_day = darr[ix[-1] - day_cnt +1]
-        print day_cnt, ' days from ', start_day, ' to ', end_day
+        print "got", day_cnt, 'days from', start_day, 'to', end_day
 
         ti=l1.TradingDayIterator(start_day)
         day=ti.yyyymmdd()
         bar = []
         day_arr=[]
         while day <= end_day :
-            print "reading ", day, 
+            #print "reading ", day, 
             b, c, bs = self.load_day(day)
             if len(b) == 0 :
-                print " missing, filling zeros"
+                if verbose :
+                    print " missing, filling zeros on ",day
                 bar.append(self._fill_daily_bar_col(day,bar_sec,cols))
                 day_arr.append(day)
             else :
                 bar.append(self._scale(day, b, c, bs, cols, bar_sec))
                 day_arr.append(day)
-                print " scale bar_sec from ", bs, " to ", bar_sec
+                #print " scale bar_sec from ", bs, " to ", bar_sec
             ti.next()
             day=ti.yyyymmdd()
 
@@ -542,7 +543,7 @@ class RepoDailyBar :
             col= list(copy.deepcopy(self.idx['daily'][day]['cols']))
             try :
                 bfn = self.path+'/daily/'+day+'/bar.npz'
-                bar = np.load(bfn)['bar']
+                bar = np.load(bfn, allow_pickle=True)['bar']
             except KeyboardInterrupt as e :
                 print 'Keyboard interrupt!'
                 raise e
