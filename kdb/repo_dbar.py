@@ -548,7 +548,7 @@ class RepoDailyBar :
                 raise e
             except :
                 print bfn+' not found but is in the repo index'
-                self.remove_day(day)
+                self.remove_day(day, check=False)
                 return [], [], 0
         else :
             return [], [], 0
@@ -571,19 +571,20 @@ class RepoDailyBar :
                 bar = bar0
         return bar, col, bs
 
-    def remove_day(self, day, match_barsec=None) :
+    def remove_day(self, day, match_barsec=None, check=True) :
         """
         if match_barsec is not None then only remove the day if
         the existing barsec matches with match_barsec
         """
-        bar, col, bs = self.load_day(day)
-        if len(bar) == 0 :
-            print day, ' not exist... no need to remove'
-            return
-        if match_barsec is not None:
-            if bs != match_barsec :
-                print 'barsec not matched, day not removed!'
+        if check :
+            bar, col, bs = self.load_day(day)
+            if len(bar) == 0 :
+                print day, ' not exist... no need to remove'
                 return
+            if match_barsec is not None:
+                if bs != match_barsec :
+                    print 'barsec not matched, day not removed!'
+                    return
 
         print 'repo removing %s on %s'%(self.symbol, day)
         try :
