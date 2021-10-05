@@ -113,17 +113,17 @@ def ix_by_utc(u0, utc, verbose=True) :
     ix0 = np.clip(np.searchsorted(u0, utc), 0, len(u0)-1)
     zix = np.nonzero(u0[ix0] - utc == 0)[0]
     if verbose :
-        print 'got %d (out of %d total) bars, mismatch %d'%(len(utc), len(u0), len(utc)-len(zix))
+        print ('got %d (out of %d total) bars, mismatch %d'%(len(utc), len(u0), len(utc)-len(zix)))
     if len(zix) != len(utc) :
         if verbose :
-            print 'missing: ', np.delete(np.arange(len(u1)), ix0[zix])
-            print 'not used:', np.delete(np.arange(len(ix0)), zix)
+            print ('missing: ', np.delete(np.arange(len(u1)), ix0[zix]))
+            print ('not used:', np.delete(np.arange(len(ix0)), zix))
         ix0=ix0[zix]
     return ix0, zix
 
 def sync_lr_lpx(dbar, day, upd_col) :
     if upd_col is None :
-        print 'upd_col is none for sync_lr_lpx!'
+        print ('upd_col is none for sync_lr_lpx!')
         return
     sync_lr_by_lpx(dbar,day,upd_col=upd_col)
     sync_lpx_by_lr(dbar,day,upd_col=upd_col)
@@ -143,11 +143,11 @@ def sync_lr_by_lpx(dbar, day, upd_col=None) :
         if 'lpx' not in col_name(upd_col) or 'lr' in col_name(upd_col) :
             return
         else :
-            print 'lpx updated but not lr, lr to be recalculated',
-    print 'update lr based on lpx!'
+            print ('lpx updated but not lr, lr to be recalculated',)
+    print ('update lr based on lpx!')
     bar, col, bs = dbar.load_day(day)
     if lpxc not in col :
-        print 'sync_lr_by_lpx without lpx on ', day, ' ', dbar.symbol, ' col: ', c
+        print ('sync_lr_by_lpx without lpx on ', day, ' ', dbar.symbol, ' col: ', c)
         return
 
     lpx_hist = bar[:, ci(col, col_idx('lpx'))]
@@ -181,11 +181,11 @@ def sync_lpx_by_lr(dbar, day, upd_col=None) :
         if 'lr' not in col_name(upd_col) or 'lpx' in col_name(upd_col) :
             return
         else :
-            print 'lr updated but not lpx, lpx to be recalculated',
-    print 'construct lpx based on lr!'
+            print ('lr updated but not lpx, lpx to be recalculated',)
+    print ('construct lpx based on lr!')
     bar, col, bs = dbar.load_day(day)
     if lrc not in col or lpxc not in col :
-        print 'sync_lpx_by_lr on ', day, ' ', dbar.symbol, ' without lrc + lpxc '
+        print ('sync_lpx_by_lr on ', day, ' ', dbar.symbol, ' without lrc + lpxc ')
         return
 
     lpx0 = bar[0, ci(col, col_idx('lpx'))]
@@ -289,7 +289,7 @@ class RepoDailyBar :
         if bootstrap_idx is not None :
             if l1.get_file_size(self.idxfn) > 0 :
                 raise ValueError('idx file exists: ' + self.idxfn)
-            print 'saving the given bootstrap idx'
+            print ('saving the given bootstrap idx')
             np.savez_compressed(self.idxfn, idx=bootstrap_idx)
 
         try :
@@ -328,23 +328,23 @@ class RepoDailyBar :
 
         totbars = self._get_totalbars(bar_sec)
         for b, d, c in zip(bar_arr, day_arr, col_arr) :
-            print 'update bar: ', d, ' bar_cnt: ', len(b), '/',totbars, ' ... ',
+            print ('update bar: ', d, ' bar_cnt: ', len(b), '/',totbars, ' ... ',)
             rb, col, bs = self.load_day(d)
             if len(rb) == 0 :  # add all the columns
-                print ' a new day, add all col: ', c
+                print (' a new day, add all col: ', c)
                 if len(b) != totbars :
-                    print '!!! len(b) != ', totbars, ' skipped...'
+                    print ('!!! len(b) != ', totbars, ' skipped...')
                     continue
                 rb = b
                 bs = bar_sec
                 col = copy.deepcopy(c)
             else :             # add only new columns
-                print ' found ', len(rb), ' bars (', bs, 'S), col: ', col_name(col), 
+                print (' found ', len(rb), ' bars (', bs, 'S), col: ', col_name(col), )
                 if bs != bar_sec :
-                    print ' !! bar_sec mismatch, skip'
+                    print (' !! bar_sec mismatch, skip')
                     continue
                 if len(rb) != len(b) :
-                    print ' !!! number of bars mismatch, skip'
+                    print (' !!! number of bars mismatch, skip')
                     continue
                 nc = []
                 ncbar = []
@@ -354,15 +354,15 @@ class RepoDailyBar :
                         nc.append(c0)
                         ncbar.append( b[:, i] )
                 if len(nc) == 0 :
-                    print ' no new columns, done '
+                    print (' no new columns, done ')
                     continue
-                print ' adding ', col_name(nc)
+                print (' adding ', col_name(nc))
                 rb = np.r_[rb.T, np.array(ncbar)].T
 
             # writing back to daily
             self._dump_day(d, rb, col, bs)
             sync_lr_lpx(self, d, upd_col=c)
-        print 'Done'
+        print ('Done')
 
     def overwrite(self, bar_arr, day_arr, col_arr, bar_sec, rowix = None, utcix = None) :
         """
@@ -403,35 +403,35 @@ class RepoDailyBar :
         for b, d, c, rix in zip(bar_arr, day_arr, col_arr, rowix) :
             if rix is None :
                 rix = np.arange(totbars)
-            print 'overwrite!  day: ', d, ' bar_cnt: ', len(b), '/', totbars, ' ... ',
+            print ('overwrite!  day: ', d, ' bar_cnt: ', len(b), '/', totbars, ' ... ',)
             rb, col, bs = self.load_day(d)
             # just write that in
             if len(rb) != 0 :
-                print ' loaded ', len(rb), ' bars'
+                print (' loaded ', len(rb), ' bars')
                 if bar_sec != bs :
-                    print 'barsec mismatch, skipping ', d
+                    print ('barsec mismatch, skipping ', d)
                     continue
                 if len(rb) != totbars :
                     raise ValueError('repo bar has incorrect row count???')
 
                 for i, c0 in enumerate(c) :
-                    print 'column: ', col_name(c0),
+                    print ('column: ', col_name(c0),)
                     if c0 in col :
                         if c0 == utcc :
-                            print ' cannot overwrite utc timestamp! skipping ...'
+                            print (' cannot overwrite utc timestamp! skipping ...')
                         else :
-                            print ' overwriting existing repo '
+                            print (' overwriting existing repo ')
                             rb[rix, ci(col, c0)] = b[:, i]
                         continue
                     else :
-                        print 'a new column! adding to repo '
+                        print ('a new column! adding to repo ')
                         # but in this case, the rowix has to match totbars
                         if len(rix) != totbars :
                             raise ValueError('rix not equal to totbars for adding column ' + str(len(rix)))
                         col.append(c0)
                         rb = np.r_[rb.T, [b[:, i]]].T
             else :
-                print ' NO bars found, adding all columns as new! '
+                print (' NO bars found, adding all columns as new! ')
                 if len(rix) != totbars :
                     raise ValueError('rix not equal to totbars for adding column ' + str(len(rix)))
                 col = copy.deepcopy(c)
@@ -453,7 +453,7 @@ class RepoDailyBar :
         group_days: first dimension of the 3-d array, daily: 1, weekly=5, etc
         """
         if end_day is not None :
-            #print 'end_day not null, got ',
+            #print ('end_day not null, got ',)
             ti=l1.TradingDayIterator(start_day)
             day_cnt=0
             day=ti.yyyymmdd()
@@ -487,27 +487,27 @@ class RepoDailyBar :
         end_day = darr[ix[-1]]
         day_cnt = ix[-1]-ix[0]+1
         if day_cnt / group_days * group_days != day_cnt :
-            print '( Warning! group_days ' + str(group_days) + ' not multiple of ' + str(day_cnt) + ' adjustint...)', 
+            print ('( Warning! group_days ' + str(group_days) + ' not multiple of ' + str(day_cnt) + ' adjustint...)', )
             day_cnt = day_cnt/group_days * group_days
             start_day = darr[ix[-1] - day_cnt +1]
-        print "got", day_cnt, 'days from', start_day, 'to', end_day
+        print ("got", day_cnt, 'days from', start_day, 'to', end_day)
 
         ti=l1.TradingDayIterator(start_day)
         day=ti.yyyymmdd()
         bar = []
         day_arr=[]
         while day <= end_day :
-            #print "reading ", day, 
+            #print ("reading ", day, )
             b, c, bs = self.load_day(day)
             if len(b) == 0 :
                 if verbose :
-                    print " missing, filling zeros on ",day
+                    print (" missing, filling zeros on ",day)
                 bar.append(self._fill_daily_bar_col(day,bar_sec,cols))
                 day_arr.append(day)
             else :
                 bar.append(self._scale(day, b, c, bs, cols, bar_sec))
                 day_arr.append(day)
-                #print " scale bar_sec from ", bs, " to ", bar_sec
+                #print (" scale bar_sec from ", bs, " to ", bar_sec)
             ti.next()
             day=ti.yyyymmdd()
 
@@ -545,10 +545,10 @@ class RepoDailyBar :
                 bfn = self.path+'/daily/'+day+'/bar.npz'
                 bar = np.load(bfn, allow_pickle=True)['bar']
             except KeyboardInterrupt as e :
-                print 'Keyboard interrupt!'
+                print ('Keyboard interrupt!')
                 raise e
             except :
-                print bfn+' not found but is in the repo index'
+                print (bfn+' not found but is in the repo index')
                 self.remove_day(day, check=False)
                 return [], [], 0
         else :
@@ -556,7 +556,7 @@ class RepoDailyBar :
 
         #assert self._get_totalbars(bs) == len(bar), bfn + ' wrong size: '+str(len(bar)) + ' should  be  ' + str(self._get_totalbars(bs))
         if self._get_totalbars(bs) != len(bar) :
-            print bfn + ' wrong size: '+str(len(bar)) + ' should  be  ' + str(self._get_totalbars(bs))
+            print (bfn + ' wrong size: '+str(len(bar)) + ' should  be  ' + str(self._get_totalbars(bs)))
             utc=bar[:, ci(col,utcc)]
             u0 = self._make_daily_utc(day, bs)
             ix0, zix = ix_by_utc(u0, utc, verbose=False)
@@ -580,26 +580,26 @@ class RepoDailyBar :
         if check :
             bar, col, bs = self.load_day(day)
             if len(bar) == 0 :
-                print day, ' not exist... no need to remove'
+                print (day, ' not exist... no need to remove')
                 return
             if match_barsec is not None:
                 if bs != match_barsec :
-                    print 'barsec not matched, day not removed!'
+                    print ('barsec not matched, day not removed!')
                     return
 
-        print 'repo removing %s on %s'%(self.symbol, day)
+        print ('repo removing %s on %s'%(self.symbol, day))
         try :
             ret=self.idx['daily'].pop(day)
             if ret is not None :
                 np.savez_compressed(self.idxfn, idx=self.idx)
         except :
-            print self.symbol, ' on ', day, ': not found in index, NOT REMOVED'
+            print (self.symbol, ' on ', day, ': not found in index, NOT REMOVED')
 
         try :
             os.system('rm -fR ' + self.path+'/daily/'+day)
         except :
             traceback.print_exc()
-            print self.symbol, ' on ', day, ': not found in daily file, NOT REMOVED '
+            print (self.symbol, ' on ', day, ': not found in daily file, NOT REMOVED ')
 
     def all_days(self) :
         """
@@ -616,7 +616,7 @@ class RepoDailyBar :
             b[0,ci(c,lrc)]=lr0
             self._dump_day(day, b,c,bs)
         else :
-            print 'upd_overnight_lr: ', day, ' not exist or lr not in ', c
+            print ('upd_overnight_lr: ', day, ' not exist or lr not in ', c)
 
     def clear_cols(self, day, cols, bar_sec) :
         """
@@ -629,7 +629,7 @@ class RepoDailyBar :
             if c0 in c :
                  b[:,ci(c, c0)]=0
             else :
-                 print "col ", c0, " not found in bar of ", day
+                 print ("col ", c0, " not found in bar of ", day)
         self._dump_day(day, b, c, bar_sec)
 
 
@@ -653,7 +653,7 @@ class RepoDailyBar :
         try :
             st = os.stat(self.idxfn)
         except :
-            print 'running at a wrong directory? ', self.idxfn, ' not found!'
+            print ('running at a wrong directory? ', self.idxfn, ' not found!')
             raise ValueError('file not found')
 
         try :
@@ -667,7 +667,7 @@ class RepoDailyBar :
             raise e
         except :
             traceback.print_exc()
-            print 'problem dumping bar file or idx file on ', day, ' ', self.path
+            print ('problem dumping bar file or idx file on ', day, ' ', self.path)
 
     def _get_totalbars(self, bar_sec) :
         return  (self.eh - self.sh) * (3600 / bar_sec)
@@ -768,7 +768,7 @@ class RepoDailyBar :
 
     def _scale(self,day,b,c,bs, tgt_cols, tgt_bs) :
         if tgt_bs < bs :
-            print 'scale into a smaller bar than original! ', bs, ' to ', tgt_bs
+            print ('scale into a smaller bar than original! ', bs, ' to ', tgt_bs)
             return self._fake_scale(day,b,c,bs,tgt_cols,tgt_bs)
 
         utc0 = b[:, ci(c,utcc)]
@@ -840,7 +840,7 @@ class RepoDailyBar :
             try :
                 r0 = b[ix0,:]
             except :
-                print 'cannot find a row after deleteion!'
+                print ('cannot find a row after deleteion!')
                 return []
 
             # fill in removing row
@@ -887,7 +887,7 @@ def fix_lr_nan(dbar, day_arr) :
         # filling in the lr
         ixn=np.nonzero(np.isfinite(b[:,ci(c,lrc)])==False)[0]
         if len(ixn) > 0 :
-            print 'fixing ', len(ixn), ' nan lr bars'
+            print ('fixing ', len(ixn), ' nan lr bars')
             b[ixn, ci(c,lrc)]=0
             # recalc everything
             lpx = np.log(b[:,ci(c,lpxc)])
@@ -906,7 +906,7 @@ def fix_lpx_from_lr(dbar, day, lpx0=None, dbar_ref=None) :
             b0,c0,_=dbar_ref.load_day(day)
             lpx0=b0[0,ci(c0,lpxc)]
         if min(lpx0_,lpx0)/max(lpx0_,lpx0)<0.5 :
-            print 'updating lpx using lr for ', dbar.symbol, ' on ', day
+            print ('updating lpx using lr for ', dbar.symbol, ' on ', day)
             b[:,ci(c,lpxc)]=np.r_[lpx0, np.exp(np.log(lpx0)+np.cumsum(lr[1:]))]
             dbar.remove_day(day)
             dbar.update([b],[day],[c],bs)
@@ -959,17 +959,17 @@ def UpdateFromRepo(sym_arr, day_arr, repo_path_write, repo_path_read_arr, bar_se
             try :
                 dbar_read.append(RepoDailyBar(sym, repo_path=path))
             except :
-                print path, ' excluded for ', sym
+                print (path, ' excluded for ', sym)
         for d in day_arr :
-            print 'copying ', sym, ' on ', d
+            print ('copying ', sym, ' on ', d)
             b=[]
             for dr in dbar_read :
                 b, c, bs = dr.load_day(d)
                 if len(b) > 0 and np.sum(np.abs(b[:,ci(c,lrc)])) > 0 :
                     break
-                print d, ' not found from ', dr.path
+                print (d, ' not found from ', dr.path)
             if len(b)==0 :
-                print d, ' not found from ALL Sources, skipping...'
+                print (d, ' not found from ALL Sources, skipping...')
                 continue
 
             if bs != bar_sec :
@@ -977,22 +977,22 @@ def UpdateFromRepo(sym_arr, day_arr, repo_path_write, repo_path_read_arr, bar_se
 
             b0, c0, bs0 = dbar.load_day(d)
             if should_upd_func is not None and not should_upd_func(b,c,b0,c0) :
-                print 'should_upd_func FALSE from ', dr.path
+                print ('should_upd_func FALSE from ', dr.path)
                 continue
             if len(b0) > 0 :
                 if keep_overnight in ['yes','onzero'] :
                     lr0 = b0[0,ci(c0,lrc)]
                     lr  = b[0,ci(c,lrc)]
                     if keep_overnight == 'onzero' and lr != 0 :
-                        print 'using new lr ', lr, ' replacing ', lr0
+                        print ('using new lr ', lr, ' replacing ', lr0)
                         lr0 = lr
                     else :
                         # keep the overnight lr unchanged 
-                        print 'keep over-night lr %f, ignoring %f'%(lr0, lr)
+                        print ('keep over-night lr %f, ignoring %f'%(lr0, lr))
                     b[0,ci(c,lrc)]=lr0
                 dbar.remove_day(d)
             else :
-                print d, ' not found from Dest ', repo_path_write, ' overnight not adjusted.'
+                print (d, ' not found from Dest ', repo_path_write, ' overnight not adjusted.')
             
             dbar.update([b],[d],[c],bar_sec)
             fix_lr_nan(dbar, [d])
@@ -1022,7 +1022,7 @@ def remove_outlier_lr(dbar, sday, eday, outlier_mul=500) :
             if len(ix) > 0 :
                 ix0=np.nonzero(vol[ix]<volm)[0]
                 if len(ix0) > 0 :
-                    print 'outlier ', len(ix0), ' ticks!'
+                    print ('outlier ', len(ix0), ' ticks!')
                     ix0=ix[ix0]
                     t=b[:,ci(c,utcc)]
                     ix1=[]
@@ -1031,7 +1031,7 @@ def remove_outlier_lr(dbar, sday, eday, outlier_mul=500) :
                         if not l1.is_pre_market_hour(dbar.symbol, dt) :
                             ix1.append(ix0_)
                         else :
-                            print 'NOT removing 1 tick (pre_market=True: ', dbar.symbol, ', ', dt
+                            print ('NOT removing 1 tick (pre_market=True: ', dbar.symbol, ', ', dt)
 
                     dbar._delete_rows(b,c,ix1)
                     # remove lpx and overwrite the day
@@ -1096,7 +1096,7 @@ def plot_repo(repo_path_arr, symbol_arr, sday, eday, bsarr=None, plotdt=True) :
             except :
                 import traceback
                 traceback.print_exc()
-                print 'problem with ', rp
+                print ('problem with ', rp)
 
         pl.gcf().autofmt_xdate()
         pl.legend(loc='best')

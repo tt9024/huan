@@ -574,20 +574,20 @@ def f0(fn, sym, bar_sec, line_start=1, line_end=1000000) :
                             curpt['qt']=np.array(qt).copy()
 
                 except (KeyboardInterrupt, SystemExit) :
-                    print 'stop ...'
+                    print ('stop ...')
                     f.close()
                     return cur_pt
                 except :
                     traceback.print_exc()
-                    print 'problem getting quote ', line, l, lc 
+                    print ('problem getting quote ', line, l, lc )
             if lc >= line_end :
-                print 'read ', lc, ' lines'
+                print ('read ', lc, ' lines')
                 break
 
             line=f.readline()
             lc+=1
             if lc % 10000 == 0 :
-                print 'read ', lc, ' lines'
+                print ('read ', lc, ' lines')
 
     return cur_pt
 
@@ -609,7 +609,7 @@ def get_future_bar(symbol_list, start_date, end_date, kdb_util='bin/test') :
             eday=day
             fn=bar_dir+'/'+fc+'_'+sday+'_'+eday+'.csv'
             cmdline=kdb_util + ' ' + fc + ' ' + sday + ' ' + eday + ' > ' + fn
-            print 'running ', cmdline
+            print ('running ', cmdline)
             os.system( cmdline )
             os.system( 'sleep 5' )
 
@@ -650,7 +650,7 @@ def get_daily_fx(symbol_list, start_date, end_date, kdb_util='bin/get_fx', FX_re
                 os.system( 'rm -f ' + fn + ' > /dev/null 2>&1')
                 os.system( 'rm -f ' + fn + '.gz' + ' > /dev/null 2>&1')
                 cmdline=kdb_util + ' ' + symbol + ' ' + day + ' > ' + fn+'.raw'
-                print 'running ', cmdline
+                print ('running ', cmdline)
                 os.system( cmdline )
 
                 ### reduce the columns of the bar file
@@ -661,7 +661,7 @@ def get_daily_fx(symbol_list, start_date, end_date, kdb_util='bin/get_fx', FX_re
                     os.system('gzip ' + fn)
                     os.system('rm -f ' + fn+'.raw > /dev/null 2>&1')
                 except :
-                    print 'problem parsing the raw file ', fn, ', skipping '
+                    print ('problem parsing the raw file ', fn, ', skipping ')
                     
                 os.system( 'sleep 8' )
             ti.next()
@@ -688,7 +688,7 @@ def get_bar_spot(symbol_list, start_date, end_date, kdb_util='bin/get_fx_bar', F
                 os.system( 'rm -f ' + fn + ' > /dev/null 2>&1')
                 os.system( 'rm -f ' + fn + '.gz' + ' > /dev/null 2>&1')
                 cmdline=kdb_util + ' ' + symbol + ' ' + sday + ' '  + eday + ' > ' + fn
-                print 'running ', cmdline
+                print ('running ', cmdline)
                 os.system( cmdline )
                 os.system('gzip ' + fn)
                 os.system( 'sleep 10' )
@@ -716,7 +716,7 @@ def get_future_bar_fix(symbol_list, start_date, end_date, kdb_util='bin/get_bar'
                 os.system( 'rm -f ' + fn + ' > /dev/null 2>&1')
                 os.system( 'rm -f ' + fn + '.gz' + ' > /dev/null 2>&1')
                 cmdline=kdb_util + ' ' + fc + ' ' + sday + ' ' + eday + ' > ' + fn
-                print 'running ', cmdline
+                print ('running ', cmdline)
                 os.system( cmdline )
                 os.system ('gzip ' + fn)
                 os.system( 'sleep 10' )
@@ -744,13 +744,13 @@ def get_future_trade(symbol_list, start_date, end_date, kdb_util='bin/get_trade'
                 cset.append(fc_next+'-'+fc_next_next[-2:])
             for c in cset :
                 fn=bar_dir+'/'+c+'_trd_'+day+'.csv'
-                print 'checking ', c, fn
+                print ('checking ', c, fn)
                 # check if the file exists and the size is small
                 if get_file_size(fn) < 500 and get_file_size(fn+'.gz') < 500 :
                     os.system('rm -f ' + fn + ' > /dev/null 2>&1')
                     os.system('rm -f ' + fn + '.gz' + ' > /dev/null 2>&1')
                     cmdline=kdb_util + ' ' + c + ' ' + day + ' > ' + fn
-                    print 'running ', cmdline
+                    print ('running ', cmdline)
                     if not mock_run :
                         os.system( cmdline )
                         os.system('gzip ' + fn)
@@ -788,7 +788,7 @@ def write_daily_bar(bar,bar_sec=5) :
         dt=datetime.datetime.fromtimestamp(bar[i,0])
         if dt.day != dt0.day :
             #raise ValueError('first day skipped, no bars between 18pm - 24am detected')
-            print 'first day skipped, no bars between 18pm - 24am detected'
+            print ('first day skipped, no bars between 18pm - 24am detected')
             break
 
     # get the initial day, last price
@@ -796,7 +796,7 @@ def write_daily_bar(bar,bar_sec=5) :
     utc_s = int(TradingDayIterator.local_ymd_to_utc(day_start, 18, 0, 0))
     x=np.searchsorted(bar[1:,0], float(utc_s-3600+bar_sec))
     last_close_px=bar[x,2]
-    print 'last close price set to previous close at ', datetime.datetime.fromtimestamp(bar[x,0]), ' px: ', last_close_px
+    print ('last close price set to previous close at ', datetime.datetime.fromtimestamp(bar[x,0]), ' px: ', last_close_px)
     day_end=datetime.datetime.fromtimestamp(bar[-1,0]).strftime('%Y%m%d')
     # deciding on the trading days
     if dt.hour > 17 :
@@ -806,7 +806,7 @@ def write_daily_bar(bar,bar_sec=5) :
     else :
         trd_day_start=day_start
     trd_day_end=day_end
-    print 'preparing bar from ', day_start, ' to ', day_end, ' , trading days: ', trd_day_start, trd_day_end
+    print ('preparing bar from ', day_start, ' to ', day_end, ' , trading days: ', trd_day_start, trd_day_end)
 
     ti=TradingDayIterator(day_start, adj_start=False)
     day=ti.yyyymmdd()  # day is the start_day
@@ -829,10 +829,10 @@ def write_daily_bar(bar,bar_sec=5) :
         ix_utc=((bar0[:,0]-float(utc_s))/bar_sec+1e-9).astype(int)
         bar_utc=np.arange(utc_s+bar_sec, utc_e+bar_sec, bar_sec) # bar time will be time of close price, as if in prod
 
-        print 'getting bar ', day+'-18:00', day1+'-17:00', ' , got ', j-i, 'bars'
+        print ('getting bar ', day+'-18:00', day1+'-17:00', ' , got ', j-i, 'bars')
         # start to construct bar
         if j<=i :
-            print ' NO bars found, skipping'
+            print (' NO bars found, skipping')
         else :
             bar_arr=[]
             bar_arr.append(bar_utc.astype(float))
@@ -857,7 +857,7 @@ def write_daily_bar(bar,bar_sec=5) :
             ix1=np.union1d(ix1,np.nonzero(np.abs(lr_lo)>=MaxLR)[0])
             ix1=np.union1d(ix1,np.nonzero(np.abs(lr_vw)>=MaxLR)[0])
             if len(ix1) > 0 :
-                print 'warning: removing ', len(ix1), 'ticks exceed MaxLR (lr/lo/hi/vw) ', zip(lr[ix1],lr_hi[ix1],lr_lo[ix1],lr_vw[ix1])
+                print ('warning: removing ', len(ix1), 'ticks exceed MaxLR (lr/lo/hi/vw) ', zip(lr[ix1],lr_hi[ix1],lr_lo[ix1],lr_vw[ix1]))
                 lr[ix1]=0
                 lr_hi[ix1]=0
                 lr_lo[ix1]=0
@@ -873,7 +873,7 @@ def write_daily_bar(bar,bar_sec=5) :
                 nix=np.nonzero(np.isnan(v0))[0]
                 nix=np.union1d(nix, np.nonzero(np.isinf(np.abs(v0)))[0])
                 if len(nix) > 0 :
-                    print 'warning: removing ', len(nix), ' nan/inf ticks for ', vn
+                    print ('warning: removing ', len(nix), ' nan/inf ticks for ', vn)
                     v0[nix]=0
                 b0=np.zeros(N).astype(float)
                 b0[ix_utc]=v0
@@ -1013,7 +1013,7 @@ def bar_by_file_ib(fn,bid_ask_spd,bar_qt=None,bar_trd=None) :
     if dt.hour > 16 :
         t0 = qts[0] + (24-dt.hour)*3600
         ix=np.searchsorted(qts, t0)
-        print 'cutting out leading ', ix , ' bars'
+        print ('cutting out leading ', ix , ' bars')
         bar_qt=bar_qt[ix:,:]
         bar_trd=bar_trd[ix:,:]
 
@@ -1027,7 +1027,7 @@ def bar_by_file_ib(fn,bid_ask_spd,bar_qt=None,bar_trd=None) :
     # they should be the same, otherwise, patch the different ones
     ix0=np.nonzero(tts[tix]-qts!=0)[0]
     if len(ix0) != 0 : 
-        print len(ix0), ' bars mismatch!'
+        print (len(ix0), ' bars mismatch!')
     ts=bar_trd[tix,:]
     ts[tix[ix0],5]=0
     ts[tix[ix0],6]=0
@@ -1102,7 +1102,7 @@ def gen_bar0(symbol,year,check_only=False, ext_fields=False, ibbar=True, spread=
     fn0=[]
     for f in fn :
         if os.stat(f).st_size < 500 :
-            print '\t\t\t ***** ', f, ' is too small, ignored'
+            print ('\t\t\t ***** ', f, ' is too small, ignored')
             continue
         ds0=f.split('/')[-1].split('_')[1]
         if ds0[:4]!=year :
@@ -1121,7 +1121,7 @@ def gen_bar0(symbol,year,check_only=False, ext_fields=False, ibbar=True, spread=
             raise ValueError('time overlap! ' + '%s(%s)>%s(%s)'%(des0,f0,dss0,f1))
 
     if check_only :
-        print year, ': ', len(fn0), ' files'
+        print (year, ': ', len(fn0), ' files')
         return
     if not ext_fields :
         num_col=5 # utc, lr, volume, buy-sell, high_rt-low_rt
@@ -1132,10 +1132,10 @@ def gen_bar0(symbol,year,check_only=False, ext_fields=False, ibbar=True, spread=
         return bar_lr
     for f in fn :
         if f[-3:]=='.gz' :
-            print 'gunzip ', f
+            print ('gunzip ', f)
             os.system('gunzip '+f)
             f = f[:-3]
-        print 'reading bar file ',f
+        print ('reading bar file ',f)
         if ibbar :
             _,_,b=bar_by_file_ib(f[:-7],spread)
         else :
@@ -1167,7 +1167,7 @@ def gen_bar(symbol, year_s=1998, year_e=2018, check_only=False, ext_fields=True)
                 ba.append(barlr)
         except :
             traceback.print_exc()
-            print 'problem getting ', y, ', continue...'
+            print ('problem getting ', y, ', continue...')
 
     if check_only :
         return
