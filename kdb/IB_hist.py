@@ -70,23 +70,23 @@ def write_daily_bar(symbol, bar, bar_sec=5, is_front=True, last_close_px=None, g
         # only take the last price within 5 minutes of utc_s
         if x+1 >= bar.shape[0] or bar[x+1, 0] - utc_s > 300 :
             if x+1>=bar.shape[0] :
-                print 'no bars found after the start utc of ', day_start
+                print ('no bars found after the start utc of ', day_start)
             else :
-                print 'start up utc (%d) more than 5 minutes later than start utc (%d) on %s'%(bar[x+1,0], utc_s, day_start)
-                print 'initializing start up last_close_px deferred'
+                print ('start up utc (%d) more than 5 minutes later than start utc (%d) on %s'%(bar[x+1,0], utc_s, day_start))
+                print ('initializing start up last_close_px deferred')
         else :
             if x == 0 :
                 #last_close_px = bar[0, 2]
                 #print 'last close price set as the first bar open px, this should use previous contract', datetime.datetime.fromtimestamp(bar[0,0]), datetime.datetime.fromtimestamp(bar[1,0])
                 last_close_px = bar[0, 5]
-                print 'lost last close price, set as the first bar close px'
+                print ('lost last close price, set as the first bar close px')
             else :
                 last_close_px=bar[x,5]
-                print 'last close price set to close px of bar ', datetime.datetime.fromtimestamp(bar[x,0]), ' px: ', last_close_px
+                print ('last close price set to close px of bar ', datetime.datetime.fromtimestamp(bar[x,0]), ' px: ', last_close_px)
 
-        print 'GOT last close px ', last_close_px
+        print ('GOT last close px ', last_close_px)
     else :
-        print 'GIVEN last close price ', last_close_px
+        print ('GIVEN last close price ', last_close_px)
 
     day_end=datetime.datetime.fromtimestamp(bar[-1,0]).strftime('%Y%m%d')
     # deciding on the trading days
@@ -99,7 +99,7 @@ def write_daily_bar(symbol, bar, bar_sec=5, is_front=True, last_close_px=None, g
     else :
         trd_day_start=day_start
     trd_day_end=day_end
-    print 'preparing bar from ', day_start, ' to ', day_end, ' , trading days: ', trd_day_start, trd_day_end
+    print ('preparing bar from ', day_start, ' to ', day_end, ' , trading days: ', trd_day_start, trd_day_end)
 
     ti=l1.TradingDayIterator(trd_day_start, adj_start=False) # day maybe a sunday
     day1=ti.yyyymmdd()  # first trading day
@@ -117,8 +117,8 @@ def write_daily_bar(symbol, bar, bar_sec=5, is_front=True, last_close_px=None, g
         j=np.searchsorted(bar[:, 0], float(utc_e)-1e-6)
         bar0=bar[i:j,:]  # take the bars in between the first occurance of start_hour (or after) and the last occurance of end_hour or before
 
-        print 'getting bar ', day+'-'+str(start_hour)+':00', day1+'-'+str(end_hour)+':00', ' , got ', j-i, 'bars'
-        N = (utc_e-utc_s)/bar_sec  # but we still fill in each bar, so N should be fixed for a given symbol/venue pair
+        print ('getting bar ', day+'-'+str(start_hour)+':00', day1+'-'+str(end_hour)+':00', ' , got ', j-i, 'bars')
+        N = (utc_e-utc_s)//bar_sec  # but we still fill in each bar, so N should be fixed for a given symbol/venue pair
 
         # here N*0.90, is to account for some closing hours during half hour ib retrieval time
         # The problem with using histclient.exe to retrieve IB history data for ES is
@@ -136,20 +136,20 @@ def write_daily_bar(symbol, bar, bar_sec=5, is_front=True, last_close_px=None, g
                 bar_good=False
 
         if not bar_good:
-            print 'fewer bars for trading day %s: %d < %d * 0.9'%(day1, j-i,N)
+            print ('fewer bars for trading day %s: %d < %d * 0.9'%(day1, j-i,N))
             if day1 not in l1.bad_days and get_missing :
                 # recurse with the current last price and get the updated last price
-                print 'getting missing day %s'%(day1)
+                print ('getting missing day %s'%(day1))
                 from ibbar import get_missing_day
                 fn = get_missing_day(symbol, [day1], bar_sec=bar_sec, is_front=is_front, reuse_exist_file=True)
                 try :
                     _,_,b0=bar_by_file_ib(fn[0],symbol, start_day=day1, end_day=day1)
                 except Exception as e :
-                    print e
+                    print (e)
                     b0 = []
 
                 if len(b0) > j-i :
-                    print 'Getting more bars %d > %d on %s for %s, take it!'%(len(b0), j-i, day1, symbol)
+                    print ('Getting more bars %d > %d on %s for %s, take it!'%(len(b0), j-i, day1, symbol))
                     barr0, trade_days0, col_arr0, bad_trade_days0, last_close_px0=write_daily_bar(symbol, b0, bar_sec=bar_sec, is_front=is_front, last_close_px=last_close_px, get_missing=False)
                     # taken as done
                     barr+=barr0
@@ -160,17 +160,17 @@ def write_daily_bar(symbol, bar, bar_sec=5, is_front=True, last_close_px=None, g
                     ti.next()
                     day1=ti.yyyymmdd()
                     continue
-                print 'Got %d bars on %s, had %d bars (%s), use previous!'%(len(b0), day1, j-i, symbol)
+                print ('Got %d bars on %s, had %d bars (%s), use previous!'%(len(b0), day1, j-i, symbol))
 
         if len(bar0) < 1 :
-            print 'Bad Day! Too fewer bars in trading day %s: %d, should have %d '%(day1, j-i,N)
+            print ('Bad Day! Too fewer bars in trading day %s: %d, should have %d '%(day1, j-i,N))
             bad_trade_days.append(day1)
         else :
             ix_utc=((bar0[:,0]-float(utc_s))/bar_sec+1e-9).astype(int) # lr(close_px-open_px) of a bar0 has bar_utc
             bar_utc=np.arange(utc_s+bar_sec, utc_e+bar_sec, bar_sec) # bar time will be time of close price, as if in prod
 
             if N != j-i :
-                print 'fill missing for only ', j-i, ' bars (should be ', N, ')'
+                print ('fill missing for only ', j-i, ' bars (should be ', N, ')')
                 bar1 = np.empty((N,bar0.shape[1]))
                 bar1[:,0] = np.arange(utc_s, utc_e, bar_sec)
                 # filling all missing for [utc, utc_ltt, open_px, hi_px, lo_px, close_px, vwap, vol, vb, vs]
@@ -196,7 +196,7 @@ def write_daily_bar(symbol, bar, bar_sec=5, is_front=True, last_close_px=None, g
             # construct the log returns for each bar, fill in zeros for gap
             #lpx_open=np.log(bar0[:,2])
             if last_close_px is None :
-                print 'setting last_close_px to ', bar0[0,2]
+                print ('setting last_close_px to ', bar0[0,2])
                 last_close_px = bar0[0, 2]
 
             lpx_open=np.log(np.r_[last_close_px,bar0[:-1,5]])
@@ -219,18 +219,18 @@ def write_daily_bar(symbol, bar, bar_sec=5, is_front=True, last_close_px=None, g
             ix1=np.union1d(ix1,np.nonzero(np.abs(lr_lo)>=MaxLR)[0])
             ix1=np.union1d(ix1,np.nonzero(np.abs(lr_vw)>=MaxLR)[0])
             if len(ix1) > 0 :
-                print 'MaxLR (', MaxLR, ') exceeded: ', len(ix1), ' ticks!'
+                print ('MaxLR (', MaxLR, ') exceeded: ', len(ix1), ' ticks!')
                 # removing one-by-one
                 for ix1_ in ix1 :
                     dt = datetime.datetime.fromtimestamp(bar_utc[ix1_])
                     if not l1.is_pre_market_hour(symbol, dt) :
-                        print 'warning: removing 1 tick lr/lo/hi/vw: ', lr[ix1_],lr_hi[ix1_],lr_lo[ix1_],lr_vw[ix1_]
+                        print ('warning: removing 1 tick lr/lo/hi/vw: ', lr[ix1_],lr_hi[ix1_],lr_lo[ix1_],lr_vw[ix1_])
                         lr[ix1_]=0
                         lr_hi[ix1_]=0
                         lr_lo[ix1_]=0
                         lr_vw[ix1_]=0
                     else :
-                        print 'NOT removing 1 tick (pre_market=True: ', symbol, ', ', dt, ') lr/lo/hi/vw: ', lr[ix1_],lr_hi[ix1_],lr_lo[ix1_],lr_vw[ix1_]
+                        print ('NOT removing 1 tick (pre_market=True: ', symbol, ', ', dt, ') lr/lo/hi/vw: ', lr[ix1_],lr_hi[ix1_],lr_lo[ix1_],lr_vw[ix1_])
 
             # the trade volumes for each bar, fill in zeros for gap
             vlm=bar0[:,7]
@@ -242,7 +242,7 @@ def write_daily_bar(symbol, bar, bar_sec=5, is_front=True, last_close_px=None, g
                 nix=np.nonzero(np.isnan(v0))[0]
                 nix=np.union1d(nix, np.nonzero(np.isinf(np.abs(v0)))[0])
                 if len(nix) > 0 :
-                    print 'warning: removing ', len(nix), ' nan/inf ticks for ', vn
+                    print ('warning: removing ', len(nix), ' nan/inf ticks for ', vn)
                     v0[nix]=0
                 b0=np.zeros(N).astype(float)
                 b0[ix_utc]=v0
@@ -306,7 +306,7 @@ def write_daily_bar(symbol, bar, bar_sec=5, is_front=True, last_close_px=None, g
             good_trade_days.append(day)
         it.next()
 
-    print 'got bad trade days ', bad_trade_days
+    print ('got bad trade days ', bad_trade_days)
     return barr, good_trade_days, col_arr, bad_trade_days, last_close_px
 
 
@@ -342,24 +342,24 @@ def get_trd (fntd) :
     """
     try :
         fn=get_gzip_filename(fntd)
-        print 'reading trd ', fntd, fn
+        print ('reading trd ', fntd, fn)
         os.system('chmod u+rw ' + fn)
         bar_trd=np.genfromtxt(fn, delimiter=',',usecols=[0,1,2,3,4,5,6,7]) #,dtype=[('utc','i8'),('open','<f8'),('high','<f8'),('low','<f8'),('close','<f8'),('vol','i8'),('cnt','i8'),('wap','<f8')])
     except :
-        print 'no trade for ', fn
+        print ('no trade for ', fn)
         bar_trd = []
     return bar_trd
 
 def get_qt(fnqt) :
     try :
         fn=get_gzip_filename(fnqt)
-        print 'reading quote ', fnqt, fn
+        print ('reading quote ', fnqt, fn)
         os.system('chmod u+rw ' + fn)
         bar_qt=np.genfromtxt(fn, delimiter=',',usecols=[0,1,2,3,4]) #, dtype=[('utc','i8'),('open','<f8'),('high','<f8'),('low','<f8'),('close','<f8')])
     except :
         import traceback
         traceback.print_exc()
-        print 'no quotes for ', fn
+        print ('no quotes for ', fn)
         bar_qt = []
     return bar_qt
 
@@ -432,7 +432,7 @@ def bar_by_file_ib(fn, symbol, start_day='19980101', end_day='20990101', bar_qt=
     is_etf = l1.venue_by_symbol(symbol) == 'ETF'
 
     if is_idx :
-        print 'Getting IDX quotes!'
+        print ('Getting IDX quotes!')
         b0 = bar_by_file_ib_idx(fn)
         if len(b0) > 0 :
             ix0, ix1 = clip_idx(b0[:, 0], symbol, start_day, end_day)
@@ -451,7 +451,7 @@ def bar_by_file_ib(fn, symbol, start_day='19980101', end_day='20990101', bar_qt=
         if has_trd :
             bar_trd = get_trd(fntd)
         if is_fx or not has_trd or len(bar_trd) < 1:
-            print 'Getting Quote Only!'
+            print ('Getting Quote Only!')
             b0 = bar_by_file_ib_qtonly(fn)
             if len(b0) > 0 :
                 ix0, ix1 = clip_idx(b0[:, 0], symbol, start_day, end_day)
@@ -495,12 +495,12 @@ def bar_by_file_ib(fn, symbol, start_day='19980101', end_day='20990101', bar_qt=
         dtt0 = l1.trd_day(tts[0])
         dtq1 = l1.trd_day(qts[-1])
         dtt1 = l1.trd_day(tts[-1])
-        print 'Got Quote: ',  dtq0, ' to ', dtq1, ' Trade: ', dtt0, ' to ', dtt1
+        print ('Got Quote: ',  dtq0, ' to ', dtq1, ' Trade: ', dtt0, ' to ', dtt1)
 
         #if (qts[-1] != tts[-1]) :
         if dtq1 != dtt1 :
             # only handles where ending date is different
-            print '!!! Quote/Trade ending date mismatch!!!'
+            print ('!!! Quote/Trade ending date mismatch!!!')
             ts = min(qts[-1], tts[-1])
             if qts[-1] > ts :
                 ix = np.nonzero(qts>ts)[0]
@@ -512,7 +512,7 @@ def bar_by_file_ib(fn, symbol, start_day='19980101', end_day='20990101', bar_qt=
                 bar_trd = bar_trd[:ix[0], :]
         #elif (qts[0] != tts[0]) :
         elif dtq0 != dtt0 :
-            print '!!! Quote/Trade date starting mismatch!!!'
+            print ('!!! Quote/Trade date starting mismatch!!!')
             ts = max(qts[0], tts[0])
             if qts[0] < ts :
                 ix = np.nonzero(qts<ts)[0]
@@ -531,7 +531,7 @@ def bar_by_file_ib(fn, symbol, start_day='19980101', end_day='20990101', bar_qt=
     # they should be the same, otherwise, patch the different ones
     ix0=np.nonzero(tts[tix]-qts!=0)[0]
     if len(ix0) != 0 : 
-        print len(ix0), ' bars mismatch!'
+        print (len(ix0), ' bars mismatch!')
     ts=bar_trd[tix,:]
 
     # This should be tts
@@ -548,7 +548,7 @@ def bar_by_file_ib(fn, symbol, start_day='19980101', end_day='20990101', bar_qt=
     vb=vol.copy()
     vs=vol.copy()
     if is_etf :
-        print 'adjust ETF size '
+        print ('adjust ETF size ')
         # IB's ETF volume in LOTS, i.e. 250 = 2 LOTS
         vol=vol*100+50
         vb=vb*100+50
@@ -593,7 +593,7 @@ def fn_from_dates(symbol, sday, eday, is_front_future) :
         is_etf = l1.venue_by_symbol(symbol) == 'ETF'
         is_idx = l1.venue_by_symbol(symbol) == 'IDX'
     except :
-        print 'Unknow symbol %s'%(symbol)
+        print ('Unknow symbol %s'%(symbol))
         raise ValueError('Unknown symbol ' + symbol)
 
     from ibbar import read_cfg
@@ -601,30 +601,59 @@ def fn_from_dates(symbol, sday, eday, is_front_future) :
     sym0 = symbol
     if symbol in l1.RicMap.keys() :
         sym0 = l1.RicMap[symbol]
+
+    glob_str = None
     if is_etf :
-        fqt=glob.glob(hist_path+'/ETF/'+sym0+'_[12]*_qt.csv*')
+        path = hist_path+'/ETF'
+        glob_str = os.path.join(path, sym0+'_[12]*_qt.csv')
     elif is_fx :
-        fqt=glob.glob(hist_path+'/FX/'+sym0+'_[12]*_qt.csv*')
+        path = hist_path+'/FX'
+        glob_str = os.path.join(path, sym0+'_[12]*_qt.csv')
     elif is_idx :
-        fqt=glob.glob(hist_path+'/IDX/'+sym0+'_[12]*_trd.csv*')
+        path = hist_path+'/IDX'
+        glob_str = os.path.join(path, sym0+'_[12]*_trd.csv')
     else :
         if is_front_future :
-            fqt=glob.glob(hist_path+'/'+symbol+'/'+sym0+'*_[12]*_qt.csv*')
+            path = hist_path+'/'+symbol
+            glob_str = os.path.join(path, sym0+'*_[12]*_qt.csv')
         else :
-            fqt=glob.glob(hist_path+'/'+symbol+'/nc/'+sym0+'??_[12]*_qt.csv*')
+            path = hist_path+'/'+symbol+'/nc'
+            glob_str = os.path.join(path, sym0+'??_[12]*_qt.csv')
 
+    gzip_str = os.path.join(path, '*_*_*.csv')
+    print ('gzipping ', len(glob.glob(gzip_str)), ' files')
+    os.system('gzip -f ' + gzip_str + ' > /dev/null 2>&1')
+    fqt = glob.glob(glob_str+'.gz')
     ds=[]
     de=[]
     fn=[]
+    fset = set()
     for f in fqt :
         if os.stat(f).st_size < 500 :
-            print '\t\t\t ***** ', f, ' is too small, ignored'
+            print ('\t\t\t ***** ', f, ' is too small, ignored')
             continue
         ds0=f.split('/')[-1].split('_')[1]
         de0=f.split('/')[-1].split('_')[2].split('.')[0]
         # check for inclusion
         if ds0 > eday or de0 < sday :
             continue
+
+        # remove multi-day small fiels
+        """
+        if ds0 != de0 :
+            fsz = 50000
+            if f[:-4] == '.csv':
+                fsz *=2
+            if os.stat(f).st_size < fsz
+                print ('\t\t\t ***** ', f, ' is too small for multiday bar file, ignored')
+                continue
+        """
+
+        f0 = f[:-3] if f[-3:]=='.gz' else f
+
+        if f0 in fset:
+            continue
+        fset.add(f0)
         ds.append(ds0)
         de.append(de0)
         fn.append(f)
@@ -641,23 +670,36 @@ def fn_from_dates(symbol, sday, eday, is_front_future) :
     des=np.array(de)[ix]
     fns=np.array(fn)[ix]
 
+    fns_addition = [] # contained but have more content
     while True :
         if len(fns) == 0 :
-            print 'ERROR! Nothing found for %s from %s to %s (front %s), search path %s'%(symbol, sday, eday, str(is_front_future), hist_path)
+            print ('ERROR! Nothing found for %s from %s to %s (front %s), search path %s'%(symbol, sday, eday, str(is_front_future), hist_path))
             break
 
         # remove the files that are contained
         desi=des.astype(int)
         ix = np.nonzero(desi[1:]-desi[:-1]<=0)[0]
         if len(ix) > 0 :
-            print fns[ix+1], ' contained by ', fns[ix], ', removed, if needed, consider load and overwrite repo'
+            print (fns[ix+1], ' contained by ', fns[ix])
+            # check for updates
+            for ix0 in ix:
+                # remove one-day files
+                if dss[ix0+1] != des[ix0+1]:
+                    st_new = os.stat(fns[ix0+1])
+                    st_org = os.stat(fns[ix0])
+                    if st_new.st_mtime > st_org.st_mtime and st_new.st_size >= st_org.st_size:
+                        print ('%s is newer and bigger, not removed.'%(fns[ix+1]))
+                        fns_addition.append(fns[ix0+1])
+                        continue
+                print ('%s removed, if needed, consider load and overwrite repo'%(fns[ix0+1]))
+
             fns = np.delete(fns, ix+1)
             des = np.delete(des, ix+1)
             dss = np.delete(dss, ix+1)
         else :
             break
 
-    return fns, is_fx, is_etf, is_idx
+    return list(fns)+fns_addition, is_fx, is_etf, is_idx
 
 def get_barsec_from_file(f) :
     fa = f.split('_')
@@ -691,7 +733,7 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
 
     fn, is_fx, is_etf, is_idx = fn_from_dates(symbol, sday, eday, is_front_future)
     spread = get_future_spread(symbol)
-    print 'Got ', len(fn), ' files: ', fn, ' spread: ', spread
+    print ('Got ', len(fn), ' files: ', fn, ' spread: ', spread)
 
     num_col=8 # adding spd vol, last_trd_time, last_close_pxa
     tda=[]
@@ -702,7 +744,7 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
             if not barsec_from_file :
                 raise ValueError('Bar second mismatch for file %s with barsec %d'%(f,default_barsec))
             else :
-                print 'Set barsec to ', bar_sec, ' from ', default_barsec
+                print ('Set barsec to ', bar_sec, ' from ', default_barsec)
 
         try :
             d0, d1 = get_days_from_file(f)
@@ -710,7 +752,7 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
         except KeyboardInterrupt as e :
             raise e
         except Exception as e :
-            print e
+            traceback.print_exc()
             b = []
         if len(b) > 0 :
             ba, td, col, bad_days, last_px = write_daily_bar(symbol, b,bar_sec=bar_sec, is_front=is_front_future, get_missing=get_missing)
@@ -728,7 +770,7 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
             tda+=td
             tda_bad+=bad_days
         else :
-            print '!!! No bars was read from ', f
+            print ('!!! No bars was read from ', f)
 
     tda = list(set(tda))
     tda.sort()
@@ -739,15 +781,19 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
     # tda_bad, i.e. some missing days not found in any history files
     # todo - this shouldn't happen and most probably due to the 
     # half day/holidays, should remove
+    """
     if len(tda) == 0 :
-        print 'NOTHING found! Not getting any missing days!'
+        print ('NOTHING found! Not getting any missing days!')
     # in case there are some entirely missed days
     elif get_missing :
+    """
+    if get_missing:
         # there could be some duplication in files, so
         # so some files has bad days but otherwise already in other files.
+        bar_sec = default_barsec
         missday=[]
         d0 = max(sday, EarliestMissingDay)
-        print ' checking on the missing days from %s to %s'%(d0, eday)
+        print (' checking on the missing days from %s to %s'%(d0, eday))
 
         diter = l1.TradingDayIterator(d0)
         while d0 <= eday :
@@ -757,7 +803,7 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
             d0=diter.yyyymmdd()
 
         if len(missday) > 0 :
-            print 'getting the missing days ', missday
+            print ('getting the missing days ', missday)
             from ibbar import get_missing_day
             fn = []
             mdays = []
@@ -767,13 +813,13 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
                     fn += fn0
                     mdays.append(md)
                 else :
-                    print 'nothing on missing day: ', md
+                    print ('nothing on missing day: ', md)
 
             for f, d in zip(fn, mdays) :
                 try :
                     _,_,b=bar_by_file_ib(f,symbol, start_day=d, end_day=d)
                     if len(b) > 0 :
-                        print 'got ', len(b), ' bars from ', f, ' on missing day', d
+                        print ('got ', len(b), ' bars from ', f, ' on missing day', d)
                         ba, td, col, bad_days, lastpx0 = write_daily_bar(symbol, b,bar_sec=bar_sec, is_front=is_front_future, get_missing=False)
                         tda+=td
                         tda_bad+=bad_days
@@ -783,18 +829,18 @@ def gen_daily_bar_ib(symbol, sday, eday, default_barsec, dbar_repo, is_front_fut
                                     dbar_repo.remove_day(td0,match_barsec=bar_sec)
                             dbar_repo.update(ba, td, col, bar_sec)
                         else :
-                            print 'no trading day is found from ', f, ' on missing day ', d
+                            print ('no trading day is found from ', f, ' on missing day ', d)
                     else :
-                        print 'nothing got for missing day: ', d
+                        print ('nothing got for missing day: ', d)
                 except KeyboardInterrupt as e :
                     raise e
                 except :
                     traceback.print_exc()
-                    print 'problem processing file ', f
+                    print ('problem processing file ', f)
 
     tda.sort()
     tda_bad.sort()
-    print 'Done! Bad Days: ', tda_bad
+    print ('Done! Bad Days: ', tda_bad)
     return tda, tda_bad
 
 def clear_hist_dir(hist_path) :
@@ -853,7 +899,7 @@ def ingest_all_symb(sday, eday, repo_path=None, get_missing=True, sym_list = Non
     for sym in sym_list :
         if sym in sym_list_exclude :
             continue
-        print 'ingesting ', sym
+        print ('ingesting ', sym)
         if sym in fut_sym and 'front' in future_inclusion:
             barsec = 1
             dbar = repo.RepoDailyBar(sym, repo_path = repo_path, create=True)
@@ -891,7 +937,7 @@ def weekly_get_ingest(start_end_days=None, repo_path='repo_hist', rsync_dir_list
     else :
         sday, eday = start_end_days
 
-    print 'Got start/end day: ', sday, eday
+    print ('Got start/end day: ', sday, eday)
     ibbar.weekly_get_hist(sday, eday)
 
     #No need to do this, unless the previous get failed. But

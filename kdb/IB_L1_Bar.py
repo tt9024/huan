@@ -115,12 +115,12 @@ class L1Bar :
         barr = []
         earr = []
 
-        with open(self.bar_file, 'r') as f:
+        with open(self.bar_file, 'rb') as f:
             lastpx=None
             while True :
                 day, utc, bcols, ecols = self._read_day(f,lastpx=lastpx)
                 if day is not None :
-                    print 'read day ', day, ' ', len(utc), ' bars.', ' has ext:', ecols is not None
+                    print ('read day ', day, ' ', len(utc), ' bars.', ' has ext:', ecols is not None)
                     if len(utc) > 0 :
                         if self.dbar is not None:
                             self._upd_repo(day, utc, bcols, ecols)
@@ -157,7 +157,7 @@ class L1Bar :
         thiscnt = len(lpx_hist)
 
         if verbose :
-            print 'checking %d - %d'%(startix, endix)
+            print ('checking %d - %d'%(startix, endix))
         sh0 = self._best_shift(lpx_hist, lpx_mid, order=order, verbose=verbose)
         MINSAMPLE = 300
         if thiscnt < MINSAMPLE :
@@ -169,20 +169,20 @@ class L1Bar :
         sh1 = self._best_shift(lpx_hist[:cnt], lpx_mid[:cnt], order=order, select_margin=0.2, verbose=verbose)
         sh2 = self._best_shift(lpx_hist[cnt:], lpx_mid[cnt:], order=order, select_margin=0.2, verbose=verbose)
         if verbose :
-            print '<<< ', startix, ', ', startix+cnt, ', ', sh1
-            print '>>> ', startix+cnt, ', ', endix, ', ', sh2
+            print ('<<< ', startix, ', ', startix+cnt, ', ', sh1)
+            print ('>>> ', startix+cnt, ', ', endix, ', ', sh2)
 
         if sh1 == sh2 :
             if sh1 != sh0 :
                 if cnt < 2*MINSAMPLE :
                     if verbose :
-                        print 'segment shift disagree with total shift! go with total shift ' + str(sh0) + ' ' + str(sh1) + ' ' + str(cnt)
+                        print ('segment shift disagree with total shift! go with total shift ' + str(sh0) + ' ' + str(sh1) + ' ' + str(cnt))
                     sh1=sh0
                 else :
                     if verbose :
-                        print 'segment shift disagree with total shift! go with segment shift ' + str(sh0) + ' ' + str(sh1) + ' ' +str(cnt)
+                        print ('segment shift disagree with total shift! go with segment shift ' + str(sh0) + ' ' + str(sh1) + ' ' +str(cnt))
             if verbose :
-                print 'CONFIRMED! ', sh1
+                print ('CONFIRMED! ', sh1)
             return [[startix, endix]], [sh1]
         
         ixarr = []
@@ -190,7 +190,7 @@ class L1Bar :
         ix1, sh1 = self._best_shift_multi_seg(lpx_hist0, lpx_mid0, startix, startix+cnt, verbose=verbose)
         ix2, sh2 = self._best_shift_multi_seg(lpx_hist0, lpx_mid0, startix+cnt, endix,   verbose=verbose)
         if verbose :
-            print '!!! ', ix1+ix2, sh1+sh2
+            print ('!!! ', ix1+ix2, sh1+sh2)
         return ix1+ix2, sh1+sh2
 
     def _best_shift_linspace(self, lpx_hist, lpx_mid, segments = 1000, order = 2, verbose=False) :
@@ -251,7 +251,7 @@ class L1Bar :
             mse.append(v)
         ix = np.argsort(mse)
         if verbose :
-            print 'got mse ', mse, ' ix ', ix, ' shift', sharr[ix[0]]
+            print ('got mse ', mse, ' ix ', ix, ' shift', sharr[ix[0]])
 
         # considering the select_margin
         if select_margin is not None:
@@ -289,20 +289,20 @@ class L1Bar :
             raise ValueError('utc should not be in ow_cols! Just remove utc from ow_cols ', day)
 
         if not l1.is_trading_day(day) :
-            print 'skipping ', len(utc), ' bars on weekend ', day
+            print ('skipping ', len(utc), ' bars on weekend ', day)
             return
 
         if len(utc) < 10 or\
            len(np.nonzero(ow_arr[:, 0]               !=0)[0])<=1 or \
            len(np.nonzero(ow_arr[1:, 3]-ow_arr[:-1,3]!=0)[0])<=1 :
-            print day, ' has too few updates, skipping '
+            print (day, ' has too few updates, skipping ')
             return
         u0 = self.dbar._make_daily_utc(day, self.bar_sec)
         utcix, zix = repo.ix_by_utc(u0, utc, verbose=False)
 
         lpx=ow_arr[:,repo.ci(ow_cols,repo.lpxc)]
         lr0=self._get_overnight_lr(day, lpx[0])
-        print 'GOT OVERNIGHT LR: ', lr0
+        print ('GOT OVERNIGHT LR: ', lr0)
         if repo.lrc in ow_cols :
             ow_arr[0,repo.ci(ow_cols, repo.lrc)]=lr0
         lr=np.r_[lr0, np.zeros(len(u0)-1)]
@@ -390,7 +390,7 @@ class L1Bar :
 
         if self.venue in ['ICE', 'EUX'] :
             if ow_arr[0,repo.ci(ow_cols,repo.volc)] > np.median(ow_arr[:,repo.ci(ow_cols,repo.volc)])*100 :
-                print 'wrong volume on first bar of ICE/EUX, removing!'
+                print ('wrong volume on first bar of ICE/EUX, removing!')
                 utc=np.delete(utc,0)
                 mid=np.delete(mid,0)
                 ow_arr=np.delete(ow_arr, 0, axis=0)
@@ -398,7 +398,7 @@ class L1Bar :
 
         bar, col, bs = self.dbar.load_day(day)
         if len(bar) == 0 or repo.col_idx('utc') not in col:
-            print 'nothing found on ', day, ' write as a new day!'
+            print ('nothing found on ', day, ' write as a new day!')
             self._copy_to_repo(day, utc, ow_arr, ow_cols, upd_arr, upd_cols)
             return
 
@@ -412,7 +412,7 @@ class L1Bar :
         # figure out the best time shift (due to collection machine's clock problem) 
         # during 20180530 to 20180818
         if len(utc) == 0 :
-            print 'nothing foud on ', day, ' for ', self.dbar.symbol, ' ', self.dbar.path
+            print ('nothing foud on ', day, ' for ', self.dbar.symbol, ' ', self.dbar.path)
             return
 
         # Bar data in 2020 should be applied to shift check
@@ -431,9 +431,9 @@ class L1Bar :
                 #return u0, lpx_hist, utc, mid, utcix
 
                 ixa, sha = self._best_shift_linspace(lpx_hist[utcix], mid, segments = 500)
-                print 'Iteration ', r+1, ' got shift of ', -np.array(sha),  ', reapply and overwrite (', len(sha), ')!'
+                print ('Iteration ', r+1, ' got shift of ', -np.array(sha),  ', reapply and overwrite (', len(sha), ')!')
                 if np.max(np.abs(sha)) == 0 :
-                    print 'no shifts detected, all good!'
+                    print ('no shifts detected, all good!')
                     break
                 for ix, shift in zip(ixa, sha) :
                     if shift != 0 :
@@ -442,7 +442,7 @@ class L1Bar :
                 # need to make sure the utc monotically increase, update ow_arr and upd_arr
                 inc_ix = l1.get_inc_idx2(utc, time_inc=True)
                 if len(inc_ix) != len(utc) :
-                    print 'got ', len(inc_ix), ' increasing utc out of ', len(utc)
+                    print ('got ', len(inc_ix), ' increasing utc out of ', len(utc))
                     utc=utc[inc_ix]
                     mid=mid[inc_ix]
                     ow_arr=ow_arr[inc_ix,:]
@@ -453,8 +453,8 @@ class L1Bar :
                 # utcix has length of the regularized bar mid, each with index of repo's regular utc
                 # zix has the same length, each with index of input bar mid
                 if len(zix) != len(utc) :
-                    print 'removing ix after adjusting utc, ',
-                    print 'some ix moved out of daily utc: len(utc)=%d, len(zix)=%d'%(len(utc), len(zix))
+                    print ('removing ix after adjusting utc, ',)
+                    print ('some ix moved out of daily utc: len(utc)=%d, len(zix)=%d'%(len(utc), len(zix)))
                     utc=utc[zix]
                     mid=mid[zix]
                     ow_arr=ow_arr[zix, :]
@@ -463,7 +463,7 @@ class L1Bar :
                 """
                 ixbad = np.nonzero( utc[1:]-utc[:-1] < 1)[0]
                 if len(ixbad) > 0 :
-                    print 'removing duplicated ix ', ixbad
+                    print ('removing duplicated ix ', ixbad)
                     utc=np.delete(utc, ixbad)
                     ow_arr = np.delete(ow_arr, ixbad, axis=0)
                     upd_arr = np.delete(upd_arr, ixbad, axis=0)
@@ -491,7 +491,7 @@ class L1Bar :
 
             if diff > l1.asset_info(self.symbol)[0] * 5 :
                 #raise ValueError('contract mismatch on '+ day + ' for ' + self.symbol + ' diff ' + str(diff) + ' cnt ' + str(len(mid)))
-                print 'contract mismatch on '+ day + ' for ' + self.symbol + ' diff ' + str(diff) + ' cnt ' + str(len(mid))
+                print ('contract mismatch on '+ day + ' for ' + self.symbol + ' diff ' + str(diff) + ' cnt ' + str(len(mid)))
 
                 # use lr to update, repo should recontruct lpx
                 ix=repo.ci(ow_cols, repo.lpxc)
@@ -506,7 +506,7 @@ class L1Bar :
             # we have a day but no lpx in columns, that's an error
             # if this happens a lot, then consider write a new day
             # and we cannot even recreate lpx based on lr, without lpx0
-            print 'ERROR! no lpx on ' + day + ' for ' + self.symbol + ' write as new!'
+            print ('ERROR! no lpx on ' + day + ' for ' + self.symbol + ' write as new!')
             self.dbar.remove_day(day)
             self._copy_to_repo(day, utc, ow_arr, ow_cols, upd_arr, upd_cols)
             return
@@ -603,7 +603,7 @@ class L1Bar :
             cols[8] < 0 or cols[9] < 0 or \
             cols[10] < 0 or cols[11] < 0 or \
             cols[8] > 1e+7 or cols[9] > 1e+7 or cols[10]>1e+7 or cols[11]>1e+7 :
-                print 'Found bad value in ext column, set to 0: ', [cols[8], cols[9], cols[10], cols[11], cols[12]]
+                print ('Found bad value in ext column, set to 0: ', [cols[8], cols[9], cols[10], cols[11], cols[12]])
                 return [0,0,0,0,0]
         return [cols[8], cols[9], cols[10], cols[11], cols[12]]
 
@@ -682,7 +682,7 @@ class L1Bar :
             ct_today=l1.FC(self.symbol, day)
             ct_prev = l1.FC(self.symbol,day_prev)
             if ct_prev != ct_today :
-                print 'IB_L1 Failed Overnight ', self.symbol, day, ' due to contract roll from ', ct_prev, ' to ', ct_today
+                print ('IB_L1 Failed Overnight ', self.symbol, day, ' due to contract roll from ', ct_prev, ' to ', ct_today)
                 return 0
 
         # get the lastpx
@@ -690,7 +690,7 @@ class L1Bar :
         if len(b) > 0 :
             lastpx=b[-1,repo.ci(c,repo.lpxc)]
         else :
-            print 'IB_L1 Failed Overnight ', self.symbol, day, ' no lastpx on previous day ', day_prev, self.dbar.path
+            print ('IB_L1 Failed Overnight ', self.symbol, day, ' no lastpx on previous day ', day_prev, self.dbar.path)
             return 0
 
         # return lr
@@ -743,7 +743,7 @@ class L1Bar :
         first_tick=True
         ticks=0
         while True :
-            l = bfp.readline()
+            l = bfp.readline().decode()
             if len(l) > 20 : # some minimum size
                 utc, basic, ext = self._parse_line(l, parse_ext=parse_ext)
                 if basic is None : 
@@ -768,7 +768,7 @@ class L1Bar :
                         continue
                     else :
                         first_tick=False
-                        print 'removed first ', ticks, ' ticks for stuck'
+                        print ('removed first ', ticks, ' ticks for stuck')
 
                 bcols.append(basic)
                 if ext is not None :
@@ -821,7 +821,7 @@ class L1Bar :
             remove_ix = []
             for [s, e] in miss_arr :
                 ix = np.searchsorted(tcol, [s, e])
-                remove_ix = np.r_[remove_ix, np.arange(ix[0], ix[1])]
+                remove_ix = np.r_[remove_ix, np.arange(ix[0], ix[1])].astype(int)
 
             tcol = np.delete(tcol, remove_ix)
             bcols = np.delete(bcols, remove_ix, axis=0)
@@ -888,7 +888,7 @@ def test_l1(bar_file='bar/20180727/NYM_CL_B1S.csv', hist_load_date = None, symbo
        rm -fR and cp -fR to achieve this
     """
     if hist_load_date is not None :
-        print 'create repo ', repo_path, ' and load history dates: ', hist_load_date
+        print ('create repo ', repo_path, ' and load history dates: ', hist_load_date)
         import os
         import IB_hist as ibhist
         os.system('mkdir -p ' + repo_path + ' > /dev/null 2>&1')
@@ -898,7 +898,7 @@ def test_l1(bar_file='bar/20180727/NYM_CL_B1S.csv', hist_load_date = None, symbo
         except :
             pass
     else :
-        print 'using existing repo at ', repo_path
+        print ('using existing repo at ', repo_path)
         dbar = repo.RepoDailyBar(symbol, repo_path=repo_path)
 
     # read l1 updates from L1 Bar file
@@ -950,7 +950,7 @@ def ingest_all_l1(bar_date_dir_list=None, repo_path='./repo', sym_list=None, bar
         bar_date_dir_list=[]
         for b0 in b :
             bar_date_dir_list.append(b0.split('/')[-1])
-        print 'got ', len(bar_date_dir_list), ' directories to update'
+        print ('got ', len(bar_date_dir_list), ' directories to update')
 
     bar_date_dir_list.sort()
     for bar_date_dir in bar_date_dir_list :
@@ -960,13 +960,13 @@ def ingest_all_l1(bar_date_dir_list=None, repo_path='./repo', sym_list=None, bar
             if contype not in future_inclusion :
                 continue
             fn = glob.glob(fs)
-            print 'found ', len(fn), ' files for ', rp
+            print ('found ', len(fn), ' files for ', rp)
             for f in fn :
                 sym = f.split('/')[-1].split('_')[1]
                 if sym_list is not None and sym not in sym_list :
-                    print sym, ' not in ', sym_list, ' ignored. '
+                    print (sym, ' not in ', sym_list, ' ignored. ')
                     continue
-                print 'getting ', sym, ' from ', f, ' repo_path ', rp
+                print ('getting ', sym, ' from ', f, ' repo_path ', rp)
                 dbar = None
                 if rp is not None :
                     dbar = repo.RepoDailyBar(sym, repo_path=rp, create=True)
@@ -993,7 +993,7 @@ def fix_eux_ice_first_bar_volume(repo_l1='./repo_l1', repo_hist='./repo', sday=N
 
     #for sym in eur_sym + ice_sym :
     for sym in ['LCO'] :
-        print 'symbol: ', sym
+        print ('symbol: ', sym)
         dbarl1=repo.RepoDailyBar(sym, repo_path=repo_l1)
         dbar=repo.RepoDailyBar(sym, repo_path=repo_hist)
 
@@ -1002,24 +1002,24 @@ def fix_eux_ice_first_bar_volume(repo_l1='./repo_l1', repo_hist='./repo', sday=N
             if d < sday or d > eday:
                 continue
 
-            print 'day ', d, 
+            print ('day ', d, )
             b1,c1,bs1=dbarl1.load_day(d)
             b,c,bs=dbar.load_day(d)
             changed=False
             ix0 = np.nonzero(b1[:, repo.ci(c1,repo.volc)]>1e-10)[0]
             if len(ix0)==0 :
-                print 'all zero volume! '
+                print ('all zero volume! ')
                 continue
             ix0=ix0[0]
             vol0=b1[ix0, repo.ci(c1,repo.volc)]
             vbs0=b1[ix0, repo.ci(c1,repo.vbsc)]
-            print vol0, vbs0,
+            print (vol0, vbs0,)
             if bs == bs1 and len(b1)>0 and len(b)>0 :
                 # use b's first bar volume
                 vol0=b[ix0,repo.ci(c,repo.volc)]
                 vbs0=b[ix0,repo.ci(c,repo.vbsc)]
                 changed=True
-                print 'using repo! ', vol0, vbs0
+                print ('using repo! ', vol0, vbs0)
             else :
                 vbs1=b1[:,repo.ci(c1,repo.vbsc)]
                 if np.abs(vbs1[ix0]) > 100 * np.median(np.abs(vbs1)) :
@@ -1027,13 +1027,13 @@ def fix_eux_ice_first_bar_volume(repo_l1='./repo_l1', repo_hist='./repo', sday=N
                     vol0=0
                     vbs0=0
                     changed=True
-                    print 'setting to 0!'
+                    print ('setting to 0!')
             if changed :
                 b1[ix0, repo.ci(c1,repo.volc)]=vol0
                 b1[ix0, repo.ci(c1,repo.vbsc)]=vbs0
                 dbarl1._dump_day(d, b1,c1,bs1)
             else :
-                print 'all good!'
+                print ('all good!')
 
 def backup_to_repo(sym_arr, sday, eday, repo_l1='./repo_back', repo_hist='./repo') :
     """
@@ -1052,7 +1052,7 @@ def remove_outlier(sym_arr,repo_path, sday, eday) :
     sym_arr=['6Z','6M','6R'], front and back
     """
     for sym in sym_arr :
-        print sym
+        print (sym)
         dbar = repo.RepoDailyBar(sym, repo_path=repo_path)
         repo.remove_outlier_lr(dbar, sday, eday)
 

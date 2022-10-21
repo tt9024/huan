@@ -9,7 +9,7 @@ import glob
 class TradingDayIterator :
     def __init__(self, yyyymmdd,adj_start=True) :
         self.dt=datetime.datetime.strptime(yyyymmdd, '%Y%m%d')
-        if adj_start and self.dt.weekday() > 4 :
+        if adj_start and not is_trading_day_dt(self.dt):
             self.next()
 
     def yyyymmdd(self) :
@@ -20,18 +20,18 @@ class TradingDayIterator :
 
     def next(self) :
         self.dt+=datetime.timedelta(1)
-        while self.dt.weekday() > 4 :
+        while not is_trading_day_dt(self.dt):
             self.dt+=datetime.timedelta(1)
         return self
 
     def prev(self) :
         self.dt-=datetime.timedelta(1)
-        while self.dt.weekday() > 4 :
+        while not is_trading_day_dt(self.dt):
             self.dt-=datetime.timedelta(1)
         return self
 
     def prev_n_trade_day(self, delta) :
-        wk=delta/5
+        wk=delta//5
         wd=delta%5
         delta += 2*wk
         if self.dt.weekday() < wd :
@@ -182,19 +182,58 @@ class TradingDayIterator :
 
 def is_holiday(yyyymmdd) :
     mmdd = yyyymmdd[-4:]
-    if mmdd=='0101' or mmdd=='1231' :
+    if mmdd=='0101':
         return True
-    if mmdd=='0703' or mmdd=='0704' :
+    if mmdd=='0704' :
         return True
-    if mmdd=='1122' or mmdd=='1123' :
+    if mmdd=='1125' :
         return True
-    if mmdd=='1224' or mmdd=='1225' :
+    if mmdd=='1225':
         return True
-    return False
+
+    # CME WTI holiday schedule
+    holidays = {'2022': [       '0117','0221','0415','0530',       '0905','1124',       '1226'       ],\
+                '2021': [       '0118','0215','0402','0531','0705','0906',              '1224'       ],\
+                '2020': [       '0120','0217','0410','0525','0703','0907','1126'                     ],\
+                '2019': [       '0121','0218','0419','0527',       '0902','1128'                     ],\
+                '2018': [       '0115','0219','0330','0528',       '0903','1122'                     ],\
+                '2017': ['0102','0116','0220','0414','0529',       '0904','1123'                     ],\
+                '2016': [       '0118','0215','0325','0530',       '0905','1124',       '1226'       ],\
+                '2015': [       '0119','0216','0403','0525','0703','0907','1126'                     ],\
+                '2014': [       '0120','0217','0418','0526',       '0901','1127'                     ],\
+                '2013': [       '0121','0218','0329','0527',       '0902','1128'                     ],\
+                '2012': ['0102','0116','0220','0406','0528',       '0903','1122'                     ],\
+                '2011': [       '0117','0221','0422','0530',       '0905','1124',       '1226'       ],\
+                '2010': [       '0118','0215','0402','0531','0705','0906',              '1224'       ],\
+                '2009': [       '0119','0216','0410','0525','0703','0907','1126'                     ],\
+                '2008': [       '0121','0218','0321','0526',       '0901','1127'                     ],\
+                '2007': ['0102','0115','0219','0406','0528',       '0903','1122'                     ],\
+                '2006': ['0102','0116','0220','0414','0529',       '0904','1123'                     ],\
+                '2005': [       '0117','0221','0325','0530',       '0905','1124',       '1226'       ],\
+                '2004': ['0102','0119','0216','0409','0531','0705','0906','1126',       '1224','1231','0611'],\
+                '2003': [       '0120','0217','0418','0526',       '0901','1127','1128','1226'       ],\
+                '2002': [       '0121','0218','0329','0527','0705','0902','1128','1129'              ],\
+                '2001': [       '0115','0219','0413','0528',       '0903','1122','1123','1224',       '0911','0912','0913'],\
+                '2000': ['0103','0117','0221','0421','0529','0703','0904','1123','1124'              ],\
+                '1999': [       '0118','0215','0402','0531','0705','0906','1126',       '1224','1231'],\
+                '1998': [       '0119','0216','0410','0525','0703','0907','1126','1127'              ],\
+                '1997': [              '0217','0328','0526',       '0901','1127','1128'              ],\
+                '1996': [              '0219','0405','0527','0705','0902','1128','1129'              ],\
+                '1995': ['0102',       '0220','0414','0529','0703','0904','1123','1124'              ],\
+                '1994': [              '0221','0401','0530',       '0905','1124'        '1226'       ],\
+                '1993': [              '0215','0409','0531','0705','0906','1126',       '1224','1231'],\
+                '1992': [              '0217','0417','0525','0703','0907','1126','1127','1224'       ],\
+                '1991': [              '0218','0329','0527',       '0902','1128'                     ] \
+                }
+
+    return yyyymmdd[-4:] in holidays[yyyymmdd[:4]]
 
 def is_trading_day(yyyymmdd) :
     dt = datetime.datetime.strptime(yyyymmdd,'%Y%m%d')
     return dt.weekday() < 5 and not is_holiday(yyyymmdd)
+
+def is_trading_day_dt(dt):
+    return is_trading_day(dt.strftime('%Y%m%d'))
 
 def trd_day(utc=None) :
     """
@@ -374,6 +413,7 @@ def venue_by_symbol(symbol) :
     raise ValueError('venue not found for ' + symbol)
 
 # the holidays, days that are half day or no data. be cautious about these day
+
 bad_days = ['20170101',                                                 '20170704',                                    '20171122', '20171123', '20171224','20171225', '20171231',\
             '20180101', '20180115', '20180219', '20180308', '20180330', '20180528', '20180704', '20180903', '20181008','20181112', '20181122', '20181123', '20181224','20181225', '20181231',\
             '20190101']
@@ -478,9 +518,9 @@ def FC(symbol, yyyymmdd) :
         symbol0='FX'
     else :
         symbol0=symbol
-    if RicMap.has_key(symbol) :
+    if symbol in RicMap.keys():
         symbol=RicMap[symbol]
-    if not RollDates.has_key(symbol0) :
+    if not symbol0 in RollDates.keys():
         raise ValueError('symbol0 not in RollDates for ('+ symbol0 + ')' )
     if symbol0 == 'CL' :
         rd = CL_ROLLDAY(yyyymmdd)
@@ -543,7 +583,7 @@ def f0(fn, sym, bar_sec, line_start=1, line_end=1000000) :
                         utc=TradingDayIterator.local_ymd_to_utc(day, int(hms[0]), int(hms[1]), int(hms[2]))
                         utc_frac=float(utc)+float('.'+tm[1])
                         # setting up if it's a new contract :
-                        if not cur_pt.has_key(ct) :
+                        if not ct in cur_pt.keys() :
                             cur_pt[ct]={'nxt_bt':(utc/bar_sec+1)*bar_sec, 'qt':[0,0,0,0,0], 'last_qt':[0,0,0,0,0], 'bars':[]}
                         curpt = cur_pt[ct]
 
@@ -947,7 +987,7 @@ def get_inc_idx(ts) :
             ix0 = ix1[0]
 
     if len(dix) > 0 :
-        ixa = np.delete(ixa, dix)
+        ixa = np.delete(ixa, dix.astype(int))
     return ixa
 
 def get_inc_idx2(utc, time_inc=True) :

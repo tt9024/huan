@@ -85,7 +85,7 @@ def col_name(col) :
     if isinstance(col, list) :
         return [ col_name(c0) for c0 in col ]
     if col < len(repo_col.keys()) :
-        return repo_col.keys()[np.nonzero(np.array(repo_col.values())==col)[0][0]]
+        return list(repo_col.keys())[np.nonzero(np.array(list(repo_col.values()))==col)[0][0]]
     raise ValueError('col ' + str(col) + ' not found!')
 
 def col_idx(colname) :
@@ -294,7 +294,7 @@ class RepoDailyBar :
 
         try :
             self.idx = np.load(self.path+'/idx.npz', allow_pickle=True)['idx'].item()
-        except Exception as e:
+        except IOError as e:
             if create :
                 os.system('mkdir -p '+self.path)
                 self.idx=RepoDailyBar.make_bootstrap_idx(symbol)
@@ -303,6 +303,10 @@ class RepoDailyBar :
                 import traceback
                 traceback.print_exc()
                 raise ValueError('idx.npz not found from ' + self.path)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
 
         self.venue = self.idx['global']['venue']
         #self.sh,self.eh = self.idx['global']['sehour']
@@ -403,6 +407,7 @@ class RepoDailyBar :
         for b, d, c, rix in zip(bar_arr, day_arr, col_arr, rowix) :
             if rix is None :
                 rix = np.arange(totbars)
+            rix=rix.astype(int)
             print ('overwrite!  day: ', d, ' bar_cnt: ', len(b), '/', totbars, ' ... ',)
             rb, col, bs = self.load_day(d)
             # just write that in
@@ -486,9 +491,9 @@ class RepoDailyBar :
         start_day = darr[ix[0]]
         end_day = darr[ix[-1]]
         day_cnt = ix[-1]-ix[0]+1
-        if day_cnt / group_days * group_days != day_cnt :
+        if day_cnt // group_days * group_days != day_cnt :
             print ('( Warning! group_days ' + str(group_days) + ' not multiple of ' + str(day_cnt) + ' adjustint...)', )
-            day_cnt = day_cnt/group_days * group_days
+            day_cnt = day_cnt//group_days * group_days
             start_day = darr[ix[-1] - day_cnt +1]
         print ("got", day_cnt, 'days from', start_day, 'to', end_day)
 
@@ -505,21 +510,33 @@ class RepoDailyBar :
                 bar.append(self._fill_daily_bar_col(day,bar_sec,cols))
                 day_arr.append(day)
             else :
-                bar.append(self._scale(day, b, c, bs, cols, bar_sec))
-                day_arr.append(day)
+                try :
+                    bar.append(self._scale(day, b, c, bs, cols, bar_sec))
+                    day_arr.append(day)
+                except KeyboardInterrupt as e :
+                    print('key board stop, exit')
+                    break
+                except Exception as e:
+                    print('got exception ', str(e), ' skipping ', day)
+
                 #print (" scale bar_sec from ", bs, " to ", bar_sec)
             ti.next()
             day=ti.yyyymmdd()
 
-        bar = np.vstack(bar)
-        
+        day_cnt = len(bar)
+        print ('got ', day_cnt, ' bars')
+        if day_cnt // group_days * group_days != day_cnt :
+            day_cnt = day_cnt//group_days * group_days
+            print ('( Warning! not multiple of group_days ' + str(group_days) + ' adjusting to ', day_cnt)
+        bar = np.vstack(bar[:day_cnt])
+
         # process missing days if any
         for c in [lpxc, lttc] + col_idx(['ism1']) :
             if c in cols :
                self._fill_last(bar[:, ci(cols,c)])
 
-        d1 = day_cnt / group_days
-        bar = bar.reshape((d1, bar.shape[0]/d1, bar.shape[1]))
+        d1 = day_cnt // group_days
+        bar = bar.reshape((d1, bar.shape[0]//d1, bar.shape[1]))
         return bar
 
     def has_day(self, day) :
@@ -605,7 +622,7 @@ class RepoDailyBar :
         """
         get all the days in the repo
         """
-        return self.idx['daily'].keys()
+        return list(self.idx['daily'].keys())
 
     def upd_overnight_lr(self, day, lr0) :
         """
@@ -661,7 +678,7 @@ class RepoDailyBar :
             np.savez_compressed(bfn, bar=bar)
             np.savez_compressed(self.idxfn, idx=self.idx)
             # copy to a backup file once done, for some strange problem in index
-            if os.stat(self.idxfn).st_size > 1024 :
+            if os.stat(self.idxfn).st_size > 1024*8 :
                 os.system('cp '+self.idxfn+' '+self.idxfn+'_bk')
         except KeyboardInterrupt as e :
             raise e
@@ -670,7 +687,7 @@ class RepoDailyBar :
             print ('problem dumping bar file or idx file on ', day, ' ', self.path)
 
     def _get_totalbars(self, bar_sec) :
-        return  (self.eh - self.sh) * (3600 / bar_sec)
+        return  int(np.round((self.eh - self.sh) * (3600 / bar_sec)))
 
     def _make_daily_utc(self, day, bar_sec) :
         totbar = self._get_totalbars(bar_sec)
@@ -737,11 +754,11 @@ class RepoDailyBar :
 
         """
         assert(bs>tgt_bs)
-        assert(bs/tgt_bs*tgt_bs==bs)
+        assert(bs//tgt_bs*tgt_bs==bs)
         utc0 = b[:, ci(c,utcc)]
         utc1 = self._make_daily_utc(day, tgt_bs)
         self._check_utc(utc0, utc1)
-        fct=bs/tgt_bs
+        fct=bs//tgt_bs
 
         # utc0 is larger bar, utc1 is smaller bar
         ix=np.searchsorted(utc1,utc0)
