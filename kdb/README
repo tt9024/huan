@@ -1,0 +1,6 @@
+This directory holds all the repo_history related python utilities. 
+* IB_hist.py - parses the history data from IB into repo
+* IB_L1_Bar.py - parses the recorded IB 1 second csv file (B1S.csv) files into repo
+* KDB_hist.py - parse the KDB historical files (upto 2018)
+* CME_hist.py - parses the Level 3 tick-by-tick data from CME (Ugur) (half year)
+* repo_dbar.py - the repo, ingestion and retrieval
