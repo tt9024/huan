@@ -469,8 +469,8 @@ def md_agg_ix(md_dict, ix) :
     return md_dict_out
 
 ##############################################################
-# pyres md_dict procedure
-# 
+# MTS md_dict procedure
+#
 # get raw md_dict from ar1_md, say 30 second bar
 # 1. clean the data
 # 2. adjust the columns to be [utc, lr, vol, vbs, lpx]
@@ -567,7 +567,11 @@ def clean_bars(bars):
 
     return lr0
 
+
 ###################
+#
+# DEPRECATED!!! MOVED TO smooth.py
+#
 # play with the vb_vol using the lr 
 # lr0 = clean_bars(cl)
 # ix, lrn = vb.vb_vol(lr, 400, 3) # i.e. could get 276 bars
@@ -577,7 +581,7 @@ def clean_bars(bars):
 # build it into xobj
 ####################
 
-def local_regression_gaussian(y, width=3, poly=3):
+def local_regression_gaussian(y, width=3, poly=3, min_wt = 1e-10):
     """ local regression using a gaussian kernel
     """
     n = len(y)
@@ -589,12 +593,28 @@ def local_regression_gaussian(y, width=3, poly=3):
         X.append(np.arange(n)**p)
     X = np.array(X).T
     xs = []
+    dof = []
     for i in np.arange(n):
         wn = wt[n-1-i:2*n-1-i]
-        xtw =  X.T * wn
-        wy = wn*y
-        xs.append(np.dot(X[i,:], np.dot(np.dot(np.linalg.inv(np.dot(xtw,X)),X.T),wy)))
-    return np.array(xs)
+        wn = wn/np.sum(wn)
+        if min_wt is not None:
+            wn = np.clip(wn,min_wt,1)
+            dof.append( (np.sum(wn)**2)/np.sum(wn**2) )
+            xtw =  X.T * wn
+            wy = wn*y
+            xs.append(np.dot(X[i,:], np.dot(np.dot(np.linalg.inv(np.dot(xtw,X)),X.T),wy)))
+        else:
+            ix = np.nonzero(wn>0)[0]
+            i0 = np.clip(np.searchsorted(ix,i),0,len(ix)-1)
+            wn0 = wn[ix]
+            dof.append( (np.sum(wn0)**2)/np.sum(wn0**2) )
+            X0 = X[:len(ix),:]  #take a smaller ix, avoid explode of intercept
+            X0[:,1:] /= np.std(X0[:,1:],axis=0)
+            y0 = y[ix]
+            xtw0 =  X0.T * wn0
+            wy0 = wn0*y0
+            xs.append(np.dot(X0[i0,:], np.dot(np.dot(np.linalg.inv(np.dot(xtw0,X0)),X0.T),wy0)))
+    return np.array(xs), dof
 
 def local_regression_gaussian_2d(y2d, width=(3,3), poly=3):
     """

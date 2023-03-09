@@ -5,6 +5,104 @@ import multiprocessing as mp
 import time
 from matplotlib import pyplot as pl
 
+def get_wb(fnpz='../data/wbdict_5m.npz') :
+    wb=np.load(fnpz)
+    wb.allow_pickle=True
+    return wb.items()[0][1].item()['wbar'][2:,:,:]
+
+def get_lr_dt(wb=None, fnpz=None) :
+    if wb is None :
+        wb=get_wb(fnpz)
+    lr=wb[:,:,1]
+    dt=[]
+    for t0 in wb[0,:,0] :
+        dt.append(datetime.datetime.fromtimestamp(t0))
+    dt=np.array(dt)
+    return lr, dt
+
+def get_lrd(lr_week) :
+    n,m=lr_week.shape
+    db=m/5
+    return lr_week.reshape((n*m/db,db))
+
+dfn = ['norm','beta','gamma','dgamma','dweibull','cauchy','invgamma','invweibull','powerlaw','powerlognorm']
+#dfn = ['norm']
+
+def chisquare_test(x0,dn,param,bins=6) :
+    """
+    make each bin at least about 20 observations.  
+    and at least 20 bins.  The more observations the better.
+    That's important for CLT to work
+    """
+    n=len(x0)
+    ixr=np.nonzero(np.abs(x0)<np.std(x0)*12)[0]
+    x=x0[ixr].copy()
+    x.sort()
+    c=dn.cdf(x, *param[:-2], loc=param[-2], scale=param[-1])
+    cs=np.linspace(c[0],c[-1], np.floor((c[-1]-c[0])*bins))
+    ix=np.searchsorted(c, cs[1:]-1e-12)
+    cnt=ix-np.r_[0,ix[:-1]]
+    E=(c[ix]-c[np.r_[0,ix[:-1]]])*n
+    v,p=scipy.stats.chisquare(cnt,E,ddof=len(param)-1)
+    return v,p
+
+def chisquare_test_unstable(x, dn, param) :
+    n=len(x)
+    cnt,bv=np.histogram(x,bins=min(1000, max(n/10, 5)))
+    c1=dn.cdf(np.r_[bv[1:-1], 1e+14], *param[:-2], loc=param[-2], scale=param[-1])
+    c2=np.r_[0,c1[:-1]]
+
+    #c1=dn.cdf(bv[1:], *param[:-2], loc=param[-2], scale=param[-1])
+    #c2=dn.cdf(bv[:-1], *param[:-2], loc=param[-2], scale=param[-1])
+
+    xmid=(bv[1:]+bv[:-1])/2.0
+    pc=cnt
+    E=((c1-c2)*n).astype(int)
+
+    # remove 0 in E
+    zix=np.nonzero(E)[0]+1
+    zix0=np.r_[0,zix[:-1]]
+    cspc=np.r_[0,np.cumsum(pc)]
+    pc=cspc[zix]-cspc[zix0]
+    csE =np.r_[0,np.cumsum(E)]
+    E=csE[zix]-csE[zix0]
+
+    # remove the tail stuffs
+    pc=pc[1:-1].astype(float)
+    E=E[1:-1].astype(float)
+    v,p=scipy.stats.chisquare(pc,E)
+    return v,p
+
+def distfit(x) :
+    """
+    run with chisquare
+    """
+    pks=[]
+    pchi=[]
+    dfs=['dgamma','dweibull','cauchy','norm']
+    #dfs=dfn
+
+    for df in dfs :
+        try :
+            d=getattr(scipy.stats,df)
+            param=d.fit(x)
+            v,p=scipy.stats.kstest(x,df,args=param)
+            pks.append(p)
+            v,p=chisquare_test(x,d,param)
+            pchi.append(p)
+        except KeyboardInterrupt as e:
+            return
+        except :
+            print ('problem fitting {}'.format( df))
+
+    ps=np.array(pks) + np.array(pchi)
+    ix=np.argsort(ps)[-1]
+    print("{} {} {}".format(dfs[ix], pks[ix], pchi[ix]))
+
+    return pks, pchi
+    #for dn, pk, pc in zip(dfn, pks, pchi) :
+    #    print dn, pk, pc
+
 def bootstrap_qr0(lr,cnt=None,m0=None,ixa=None,need_var=False) :
     """
     select subset of columns in lr for qr, in case
@@ -210,6 +308,50 @@ def mergelr(lr, frac, dt=None, ix0=None) :
         ix=np.delete(ix,ix1)
     return ix, qr_score, qr_remove
 
+def dither(x, it_frac = 1, alpha=0.1) : 
+    """
+    n,m = shape(x) 
+    dither along the m direction.  
+    it_cnt = it_frac * m, i.e. local values will be
+    averged within a neighorhood of it_cnt. 
+    the higher it_frac, the larger the smooth neighborhood for
+    each local value, therefore looks more smooth. 
+    NOTE: it_fact > 0
+    alpha doesn't seem to have any effect in the results
+    """
+    x0 = x.copy()
+    reshape=False
+    if len(x.shape) == 1 :
+        reshape = True
+        x0 = x0.reshape((1,len(x)))
+    N = x0.shape[1]
+    it_cnt = int(N*it_frac+0.5)
+    k = min(it_cnt/2, 50)
+    k = max(k,1)
+    x0=np.vstack((x0[:,1+k:0:-1].T,x0.T,x0[:,-2:-3-k:-1].T)).T
+    for i in np.arange(it_cnt) :
+        d=(x0[:,:-2]+x0[:,2:])/2-x0[:,1:-1]
+        x0[:,1:-1]+=(alpha*d)
+    x0=x0[:, k+1:-k-1]
+    if reshape :
+        x0=x0.flatten()
+    return x0
+
+def wtD1(n) :
+    pass
+
+def wtD2(lrd, smooth_frac = 1) :
+    # just do a dither
+    # lrd is the (ndays,nperiod)
+    # returns weight that is inverse to the D2 smoothed std
+
+    n,m=lrd.shape
+    lrd0 = np.vstack((np.zeros(n), lrd.T, np.zeros(n))).T
+    d2s=dither( np.mean(np.abs((lrd0[:,:-2]+lrd0[:,2:])/2-lrd0[:,1:-1]), axis=0), \
+               it_frac=smooth_frac)
+    w = 1.0/d2s
+    return w/np.sum(w)
+
 def _fix_qr_positive(q,r) :
     rn, rm = r.shape
     #assert(rn == rm)
@@ -343,123 +485,6 @@ def bootstrap_vol(lr,w=None,cnt=1000) :
     sd=[]
     for i in np.arange(k):
         pass
-
-def qr6(lr_, n1=None, n2=None, n3=None, if_plot=False, dt=None,prob=False) :
-    """
-    use generative method lr
-    synthetically generate more data based on qr and run from there
-    This is merges the previous bars in generating synthetic samples
-    for later bars.  It turns out that this is not necessary.  So
-    qr3() is preferred. 
-    
-    There is another concern about the degree of freedome making
-    qr unstable.  When n close to m, qr tends to overfit towards
-    the latr bars.  So it is benefitial to generate more samples. 
-    However, single the real data is only n, each step needs to 
-    maintain a smaller n2 in order to avoid overfitting. 
-    
-    Due to lack of sample, the later bar's r_i are estimated
-    with aggregated previous bars. So smaller n2 leads to more
-    aggregation, which could reduce the sensitivity at later bars,
-    a more smoothed effect in r_i compared with larger n2. 
-
-    Input:
-       n1=m*5, i.e. total samples, including synthetically generated.
-       n2=n/5, i.e. number of columns used for each step
-       n3 is the step size of each esitmation
-       5 being a degree of freedom ratio. i.e. expect qr operate on
-       matrix with 5 times more samples than features.
-    """
-    lr=lr_.copy()
-    n,m=lr.shape
-    if m<n : 
-        q0, r0 = np.linalg.qr(lr)
-        return fix_qr_positive(q0,r0)
-
-    assert(n>m/2+1)
-    # this is the over-sample size. Note
-    # further increases this increases the 
-    # diagonal of resulting r, esp. at later bars,
-    # meaning that the 
-    if n1 is None:
-        n1=m*3
-    if n2 is None:
-        n2=n/5
-    if n3 is None:
-        n3=max(n2/10,1)
-    assert n2 > 10
-    assert n2 < m-n3-1
-    assert n1 >= n
-
-    lr1=np.zeros((n1,m))
-    lr1[:n,:]=lr.copy()
-    # this just generates more samples with existing qr
-    lr1[n:,:n2]=gen_incomplete_qr(lr[:,:n2],n1)
-
-    m0=n2+1
-    m1=min(n2+n3,m)
-    lrc=np.cumsum(lr1,axis=1)
-    if prob :
-        w0=np.sqrt(np.std(lr,axis=0))
-        wc=np.cumsum(w0)
-    while m0<=m:
-        """
-        merging previous bars doesn't make
-        big difference as the generated bars will
-        be qr'ed at the end
-        """
-        # merge lr[:,:m0] into [n, n2]
-        if not prob :
-            ix=np.linspace(0,m0-1,n2,dtype=int)
-        else :
-            #using volatility as probability to merge bars doesn't seem to help
-            #with signal capturing. And it's slow. 
-            ix=np.random.choice(np.arange(m0-1,dtype=int),m0-n2,replace=False,p=w0[:m0-1]/np.sum(w0[:m0-1]))
-            ix=np.delete(np.arange(m0),ix)
-        lr0=lrc[:,ix[1:]-1]-np.vstack((np.zeros(n1),lrc[:,ix[1:-1]-1].T)).T
-
-        # no difference in scaling here
-        if prob :
-            sc=np.arange(m0)+1
-            scl=sc[ix[1:]-1]-np.r_[0,sc[ix[1:-1]-1]]
-            lr0/=np.sqrt(scl)
-
-        delta=m1-m0+1  # this step size
-        lr0=np.vstack((lr0.T,lr1[:,m0-1:m1].T)).T
-        # r0[:,-1] is the in-sample relationship, to be maintained
-        q0,r0=_qr(lr0[:n,:])
-
-        assert r0.shape[0]==r0.shape[1] and r0.shape[1]==n2+delta-1
-        # q1 is an extention of q0 with previous generated samples
-        q1,r1=_qr(lr0[:,:-delta])
-        #scale q1 to q0
-        q1*=np.sqrt(n1)/np.sqrt(n)
-        #pick q0 to generate the column of m1
-        i0=np.arange(delta)
-        ix=np.random.randint(0,n,(n1-n,delta))
-
-        # testing
-        #ix=_choice(np.arange(n),n1-n,replace=True)
-        #ix=np.array(ix).reshape((n1-n,delta))
-
-        q0_=q0[ix[:,i0],i0+n2-1]
-
-        #generate
-        lrn=np.dot(q1[n:,:],r0[:-delta,-delta:])+np.dot(q0_,r0[-delta:,-delta:])
-        lr1[n:,m0-1:m1]=lrn.copy()
-
-        #update cumsum
-        lrn[:,0]+=lrc[n:,m0-2]
-        lrc[n:,m0-1:m1]=np.cumsum(lrn,axis=1)
-
-        m0+=delta
-        m1=min(m1+delta,m)
-
-    q,r=_qr(lr1)
-    if if_plot:
-        _plot_qr_eval(lr,q,r,dt)
-    return q,r
-
 
 def qr7(lr_, n1=None, n2=None, n3=None, if_plot=False, dt=None,prob=False) :
     lr=lr_.copy()
@@ -622,7 +647,7 @@ def _eval_qr(lr) :
         for n2 in [100, 200, 250, 350, 500, 600, 800]:
             #for prob in [False, True] :
             for n3 in [5,20] :
-                print "running ", n1, n2, n3
+                print ("running ", n1, n2, n3)
                 q,r=qr6(lr,n1=n1,n2=n2,n3=n3)
                 rs.append((n1,n2,n3,q.copy(),r.copy()))
     return rs
@@ -676,4 +701,109 @@ def qr_pca(lr) :
     where Q0 R0 = X' = U0 D0
     """
     pass
+
+##################################
+###### ICA related stuffs ########
+##################################
+def test_ica(ncomp=7,nfeat=20,npca=None,nsamp=2000) :
+    # the more complicated, the better
+    x1=np.sin(np.arange(nsamp)/nsamp/100.0)
+    x2=np.tanh((np.arange(nsamp)-nsamp/2.0)/192.0+3.0)
+    x3=((np.arange(nsamp)-nsamp*0.4)/nsamp)**3.0
+    #x4=np.cos(np.arange(2000)/412.0/1.2+1.2)*np.sin(np.sqrt((np.arange(2000)/1022.0+1.0)))
+    x4=np.cos(np.arange(nsamp)/nsamp/120.0/1.2+1.2)
+
+    x5=(np.arange(nsamp)-nsamp/2.0)/(nsamp/6.0)*(1.0/(1+np.exp(-np.arange(nsamp)/nsamp/3.0)))
+    x6=np.random.normal(0,1,nsamp)
+    x7=np.random.beta(2,5,nsamp)
+
+    X=np.vstack((x1,x2,x3,x4,x5,x6,x7)).T
+    mix=np.random.normal(0,1,(7,nfeat))
+    Xm=np.dot(X,mix)
+    Xm-=np.mean(Xm,axis=0)
+    Xm/=np.std(Xm,axis=0)
+    if npca is not None:
+        u,s,vh=np.linalg.svd(Xm,full_matrices=False)
+        Xm=np.dot(np.dot(u[:,:npca],np.diag(s[:npca])),vh[:npca,:])
+
+    from sklearn.decomposition import FastICA
+    ica=FastICA(n_components=ncomp)
+    X0=ica.fit_transform(Xm)
+
+    for i in np.arange(7) :
+        pl.figure() ; pl.plot(X[:,i]); pl.title('X'+ str(i+1))
+    for i in np.arange(ncomp) :
+        pl.figure() ; pl.plot(X0[:,i]); pl.title('Xm'+str(i+1)), pl.plot(-X0[:,i])
+
+def get_ica_ncomp_beta_yt(ncomp, X, Xt, Y) :
+    from sklearn.decomposition import FastICA
+    ica=FastICA(n_components=ncomp)
+    x=ica.fit_transform(X)
+    xt=ica.transform(Xt)
+    beta=np.dot(np.dot(np.linalg.inv(np.dot(x.T,x)),x.T),Y)
+    yt=np.dot(xt,beta)
+    return ica.components_.copy(), ica.mean_.copy(), beta, yt
+
+def ica_eval0(lrd, ncomp, s0, e0, e1=None, yt_bars=None) :
+    n,m=lrd.shape
+    if e1 is None:
+        e1 = n  # all samples
+    if yt_bars is None:
+        yt_bars = m # all bars
+    X=lrd[s0:e0,:].copy()
+    Xt=lrd[e0:e1,:].copy()
+    Y=np.sum(lrd[s0+1:e0+1,:yt_bars],axis=1)
+    Yt=np.sum(lrd[e0+1:e1+1,:yt_bars],axis=1)
+    comp,mu,beta,yt=get_ica_ncomp_beta_yt(ncomp,X,Xt,Y)
+    return comp,mu,beta,yt,Yt
+
+def ica_eval(lrd) :
+    """
+    lrd: daily lr, shape n,m
+    ncomp: ica ncomp
+    s0, e0, start/end of training
+    e1 end of testing, default till end
+    yt_bars: number of bars to aggregate for target, default 1 day, i.e. m
+
+    evaluate:
+    1. the consistency of ica components
+    2. the consistency of beta
+    3. predictability of components
+    """
+    # 1. try consistency of 1 day ica
+    for ncomp in [10, 20, 40, 100]:
+        for d in [1000, 2000, 4000]:
+            for s0 in [] :
+                pass
+
+##############
+# Main mergelr
+##############
+
+def eval(sd,r) :
+    """
+    sd is the standard deviation of each column of lr
+    r is the estimation of qr using normalized lr, i.e. each column has been normalized with sd.
+    """
+    assert(np.min(np.diagonal(r)) > 0)
+
+def vol_buck(lr,sd0):
+    """
+    With a reasonable smoothed sd, probably via bootstrap, with tanh weight,
+    The procedure works as the following:
+    1. obtain estimation of sd for current bar 
+    2. find the worst kw bars
+    3. pick one to merge that leads to best obj
+    4. pick the bewt kb bars
+    5. pick one to split that leads to best obj
+    6. decide which action to take
+
+    stop if no improvements can be obtained
+
+    objective: possible object function could be:
+       1. smoothness of vol
+       2. maximum total predictable multiplies the std/vol
+    """
+    pass
+
 
