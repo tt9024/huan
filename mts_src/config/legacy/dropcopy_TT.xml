@@ -1,0 +1,16 @@
+<exchange>
+
+  <provider>TT</provider>
+  <class>Mts::Exchange::CDropCopyFIX_TT</class>
+  <name>TT</name>
+
+  <fix>
+    <SenderCompID>MASSAR_TEST</SenderCompID>
+    <TargetCompID>TT_Dropcopy</TargetCompID>
+    <heartbeat>30</heartbeat>
+    <username>PLionnet</username>
+    <password>MassarCapital!@#</password>
+    <account>Massar</account>
+  </fix>
+
+</exchange>

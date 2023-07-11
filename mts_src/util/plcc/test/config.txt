@@ -1,0 +1,11 @@
+IntVal = 100
+daa = wef
+efwqef = 9823
+## some blash
+######
+logger=
+logger = /home/zfu/kisco/util/plcc/test/log.txt
+IntVal=
+ddf;adsf
+blabla = 9.3
+StrVal = This is a test

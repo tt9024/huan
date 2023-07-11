@@ -1,0 +1,14 @@
+#!/usr/bin/bash
+BPMain="bpmain"
+LogFile="log/launch.log"
+
+while [ 1 ] ; 
+do
+    PID=`pgrep -x "$BPMain"`
+    if [ -z "$PID" ] ; 
+    then 
+        echo "`date` $BPMain not running, restart!" >> $LogFile
+        bin/$BPMain 2>&1 >> $LogFile &
+    fi
+    sleep 1
+done

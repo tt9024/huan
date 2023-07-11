@@ -1,0 +1,97 @@
+#!/usr/bin/bash
+
+LaunchLog=/home/mts/run/log/launch.log
+PYTHON_PROCESS="launch.py"
+PYTHON_SCRIPT_PATH="/home/mts/run/python"
+PYTHON_STOP_EXIT=2
+
+function usage() {
+    echo "Usage $0 \"[start|stop]\""
+}
+
+function to_log() {
+    echo "`date` $1" >> "$LaunchLog"
+}
+
+function print_pos_loop() {
+    clear
+    CMD="bin/flr P,"
+    $CMD
+    while [ 1 ] ;
+    do
+        sleep 5
+        #echo -en "\033[100A\033[2B"
+        clear
+        POS=`$CMD`
+        # printf "$POS" | tail -n 3
+        printf "$POS"
+        #echo -en "\033[500D"
+    done
+}
+
+function stop() {
+    while [ 1 ] ;
+    do
+        pgrep "$PYTHON_PROCESS" > /dev/null 2>&1
+        if [ $? -eq 1 ] ; 
+        then 
+            break
+        fi
+        to_log "Detected running MTS instance $PYTHON_PROCESS stopping...
+        echo "Detected running MTS instance $PYTHON_PROCESS stopping...
+        pkill "$PYTHON_PROCESS"
+        sleep 5
+    done
+}
+
+function start() {
+    to_log "Starting MTS"
+    "${PYTHON_SCRIPT_PATH}/${PYTHON_PROCESS}" >> $LaunchLog 2>&1
+    # TODO - return code should already be propigated, but just to be safe
+    retcod=$?
+    return $retcod
+}
+
+if [ $# -eq 0 ] ;
+then 
+    usage
+    exit 0
+fi
+
+if [ $1 == "stop" ] ;
+then
+    stop
+    exit 0
+fi
+
+if [ $1 == "mon" ] ;
+then
+    print_pos_loop
+    exit 0
+fi
+
+if [ $1 == "start" ] ;
+then
+    # TODO - consider moving it to a process for more flexibility.
+    # However running MTS at current shell is simple and 
+    # easy for I/O capturing. 
+    # Review if there were more reasons.
+    while [ 1 ] ;
+    do
+        stop
+        start
+        EXIT_CODE=$?
+        to_log "Exited with "$EXIT_CODE
+        if [ $EXIT_CODE -eq $PYTHON_STOP_EXIT ] ;
+        then 
+            to_log "User interrupted, MTS stopped!"
+            break
+        fi
+        to_log "MTS exit the launch, re-launching..."
+        sleep 5
+    done
+    exit 0
+fi
+
+usage
+exit 0

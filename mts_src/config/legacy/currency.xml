@@ -1,0 +1,89 @@
+<currencies>
+
+  <currency>
+    <id>1</id>
+    <ccy>AUD</ccy>
+    <usdrate>0.74686</usdrate>
+  </currency>
+
+  <currency>
+    <id>2</id>
+    <ccy>CAD</ccy>
+    <usdrate>0.787904</usdrate>
+  </currency>
+
+  <currency>
+    <id>3</id>
+    <ccy>CHF</ccy>
+    <usdrate>1.04334</usdrate>
+  </currency>
+
+  <currency>
+    <id>4</id>
+    <ccy>EUR</ccy>
+    <usdrate>1.3401</usdrate>
+  </currency>
+
+  <currency>
+    <id>5</id>
+    <ccy>GBP</ccy>
+    <usdrate>1.6693</usdrate>
+  </currency>
+
+  <currency>
+    <id>6</id>
+    <ccy>JPY</ccy>
+    <usdrate>0.009351</usdrate>
+  </currency>
+
+  <currency>
+    <id>7</id>
+    <ccy>MXN</ccy>
+    <usdrate>0.0673</usdrate>
+  </currency>
+
+  <currency>
+    <id>8</id>
+    <ccy>NOK</ccy>
+    <usdrate>0.1316</usdrate>
+  </currency>
+
+  <currency>
+    <id>9</id>
+    <ccy>NZD</ccy>
+    <usdrate>0.84849</usdrate>
+  </currency>
+
+  <currency>
+    <id>10</id>
+    <ccy>SEK</ccy>
+    <usdrate>0.1186</usdrate>
+  </currency>
+
+  <currency>
+    <id>11</id>
+    <ccy>SGD</ccy>
+    <usdrate>0.7383</usdrate>
+  </currency>
+
+  <currency>
+    <id>12</id>
+    <ccy>TRY</ccy>
+    <usdrate>0.4065</usdrate>
+  </currency>
+
+  <currency>
+    <id>13</id>
+    <ccy>USD</ccy>
+    <usdrate>1</usdrate>
+  </currency>
+
+  <currency>
+    <id>14</id>
+    <ccy>ZAR</ccy>
+    <usdrate>0.0859</usdrate>
+  </currency>
+
+</currencies>
+
+ 

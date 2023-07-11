@@ -1,0 +1,9 @@
+[submodule "submodules/Ext"]
+	path = submodules/Ext
+	url = git@10.60.40.25:HFT/ext.git
+[submodule "submodules/Core"]
+	path = submodules/Core
+	url = git@10.60.40.25:HFT/core.git
+[submodule "submodules/Protocols"]
+	path = submodules/Protocols
+	url = git@10.60.40.25:HFT/protocols.git

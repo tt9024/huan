@@ -1,0 +1,13 @@
+<providers>
+
+  <provider>
+    <id>0</id>
+    <name>TT</name>
+    <shortcode>TT</shortcode>
+    <rttms>500</rttms>
+    <ticketcostusd>10</ticketcostusd>
+  </provider>
+
+</providers>
+
+

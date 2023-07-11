@@ -1,0 +1,173 @@
+cmake_minimum_required(VERSION 3.10)
+
+project(KISCO VERSION 1.0)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_C_FLAGS "-Wall -g -fPIC")
+set(CMAKE_CXX_FLAGS "-Wall -g -no-pie -fPIC")
+#set(CMAKE_INCLUDE_CURRENT_DIR ON)
+
+# Enable cmake testing
+enable_testing()
+
+# Set output directory based on build type debug vs release
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(OUTPUT_DIR debug)
+    message(STATUS "Generating debug build...")
+else()
+    set(OUTPUT_DIR release)
+    message(STATUS "Generating release build...")
+endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
+
+add_definitions(-DENV="DEV")
+set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/${OUTPUT_DIR}/bin)
+
+# Add Ext libraries
+set(EXT_USE_BOOST ON)
+set(EXT_USE_QUICKFIX ON)
+set(EXT_USE_GOOGLETEST ON)
+set(EXT_USE_BLPAPI ON)
+set(EXT_USE_PROTOCOLS ON)
+set(EXT_USE_GRPC ON)
+
+# Add subdirectory of submodules but exclude
+add_subdirectory(${PROJECT_SOURCE_DIR}/submodules/Ext EXCLUDE_FROM_ALL)
+add_subdirectory(${PROJECT_SOURCE_DIR}/submodules/Protocols EXCLUDE_FROM_ALL)
+add_subdirectory(${PROJECT_SOURCE_DIR}/submodules/Core EXCLUDE_FROM_ALL)
+
+# Add Core includes (FIXME: This is kind of a hack - should be exposed from Core itself)
+include_directories(${PROJECT_SOURCE_DIR}/submodules/Core/Utilities)
+include_directories(${PROJECT_SOURCE_DIR}/submodules/Core/Utilities/plcc)
+include_directories(${PROJECT_SOURCE_DIR}/submodules/Core/Interface)
+
+# Now part of Core
+#add_library(version INTERFACE)
+#add_dependencies(version generate-version)
+
+#add_subdirectory(util)
+add_subdirectory(md)
+add_subdirectory(pm)
+add_subdirectory(tp)
+#add_subdirectory(tp/bpipe)
+add_subdirectory(algo)
+
+
+#add_dependencies(bpmain blpapi)
+#add_dependencies(bptest blpapi)
+
+
+# CPack package configuration
+file(REMOVE_RECURSE ${CMAKE_CURRENT_BINARY_DIR}/dist)
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/dist)
+
+include(InstallRequiredSystemLibraries)
+install(TARGETS
+        #bpmain
+        tpmain
+        #cfgupd
+        #json_upd
+        #qtest
+        #plcc_log
+        #cfg_reader
+        #onlyme
+        booktap
+        bar_reader
+        bar_writer
+        test_pub_l1
+        floor
+        flr
+        ftap
+        ftrader
+        fpoke
+        exch_mock
+        strat_sim
+        strat_run
+        DESTINATION bin
+)
+
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/deploy/bin)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deploy/bin DESTINATION . FILE_PERMISSIONS
+        OWNER_WRITE OWNER_READ OWNER_EXECUTE
+        GROUP_READ GROUP_EXECUTE
+        WORLD_READ WORLD_EXECUTE
+)
+
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/deploy/lib)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deploy/lib DESTINATION . FILE_PERMISSIONS
+        OWNER_WRITE OWNER_READ OWNER_EXECUTE
+        GROUP_READ GROUP_EXECUTE
+        WORLD_READ WORLD_EXECUTE
+)
+
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/deploy/log)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deploy/log DESTINATION . FILE_PERMISSIONS
+        OWNER_WRITE OWNER_READ OWNER_EXECUTE
+        GROUP_READ GROUP_EXECUTE
+        WORLD_READ WORLD_EXECUTE
+)
+
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/deploy/log/fix)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deploy/log/fix DESTINATION . FILE_PERMISSIONS
+        OWNER_WRITE OWNER_READ OWNER_EXECUTE
+        GROUP_READ GROUP_EXECUTE
+        WORLD_READ WORLD_EXECUTE
+        )
+
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/deploy/recovery)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deploy/recovery DESTINATION . FILE_PERMISSIONS
+        OWNER_WRITE OWNER_READ OWNER_EXECUTE
+        GROUP_READ GROUP_EXECUTE
+        WORLD_READ WORLD_EXECUTE
+        )
+
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/deploy/bar)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deploy/bar DESTINATION . FILE_PERMISSIONS
+        OWNER_WRITE OWNER_READ OWNER_EXECUTE
+        GROUP_READ GROUP_EXECUTE
+        WORLD_READ WORLD_EXECUTE
+        )
+
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/deploy/config)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deploy/config DESTINATION . FILE_PERMISSIONS
+        OWNER_WRITE OWNER_READ OWNER_EXECUTE
+        GROUP_READ GROUP_EXECUTE
+        WORLD_READ WORLD_EXECUTE
+)
+
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/deploy/config/strat)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deploy/config DESTINATION . FILE_PERMISSIONS
+        OWNER_WRITE OWNER_READ OWNER_EXECUTE
+        GROUP_READ GROUP_EXECUTE
+        WORLD_READ WORLD_EXECUTE
+        )
+
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/deploy/config/bpipe)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deploy/config DESTINATION . FILE_PERMISSIONS
+        OWNER_WRITE OWNER_READ OWNER_EXECUTE
+        GROUP_READ GROUP_EXECUTE
+        WORLD_READ WORLD_EXECUTE
+)
+
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/deploy/var)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deploy/var DESTINATION . FILE_PERMISSIONS
+        OWNER_WRITE OWNER_READ OWNER_EXECUTE
+        GROUP_READ GROUP_EXECUTE
+        WORLD_READ WORLD_EXECUTE
+)
+
+# nb: This will build all three packages
+#set(CPACK_GENERATOR "TGZ;RPM;DEB")
+set(CPACK_GENERATOR "TGZ")
+
+set(CPACK_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/dist)
+set(CPACK_OUTPUT_FILE_PREFIX dist)
+
+set(CPACK_PACKAGE_VENDOR "MassarCapital LP")
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "MassarCapital")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "MTS: Massar Trading System")
+
+set(CPACK_PROJECT_CONFIG_FILE "${CMAKE_CURRENT_SOURCE_DIR}/CPack.package.cfg")
+set(CPACK_RPM_PACKAGE_ARCHITECTURE "X86_64")
+
+include(CPack)

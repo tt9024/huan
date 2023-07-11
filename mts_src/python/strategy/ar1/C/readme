@@ -1,0 +1,19 @@
+C code for trace inverse that implement py_sym_penta(d0,d1,d2)
+
+ti2.py - a python prototype for running the algorithm used in C, 
+         i.e. a 3-by-3 block for getting L1 and a C way of getting
+         L2 and the trace
+test.c - a C implementation of the algorithm
+trace_np.c - integration of C implementation with numpy C extension
+setup.py - code used to setup the python module for trace inverse
+
+To compile - 
+    python3 setup.py build_ext --inplace
+and copy trace_module_np.cpython-38-x86_64-linux-gnu.so to python path
+
+To test -
+    import trace_module_np as trc
+    d0 = np.array([1.0, 2.0, 3.0, 4.0, -1.0, -9]) ; d1 = np.array([ 5.0, 6.0, -7.0, 2.0, 2]) ; d2 = np.array([-8.0, 9.0, 1.0, 7])
+    trc.trace_np(d0,d1,d2)
+and check the result to be -0.3884413309982485
+

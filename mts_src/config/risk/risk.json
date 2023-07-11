@@ -1,0 +1,268 @@
+{
+    "System" : {
+        "path" :  "/home/mts/run/config/risk",
+        "files" : {
+            "volume_spread_csv": "vs_5_15_60m.csv",
+            "cme_price_banding": "cme_banding.csv",
+            "price_position_pnl": "ppp.csv",
+            "trading_status": "trading_status.csv"
+        },
+        "manual_strategy": "TSC-7000-1",
+        "skip_replay": true
+    },
+
+    "Scale":  { 
+        "file" : "/home/mts/upload/STRATEGY_WEIGHTS.yaml",
+        "map"  : {
+            "INTRADAY_MTS_AR1_WTI":                 369,
+            "INTRADAY_MTS_AR1_WTI_US":              370,
+            "INTRADAY_MTS_CAMID2_DIFFZSC":          376,
+            "INTRADAY_MTS_IDBO_TF_ENS_TSC":         380,
+            "INTRADAY_MTS_IDBO_TF_ENS_TACTICAL":    391,
+            "INTRADAY_MTS_IDBO_TF_ENS_HV":          387,
+            "INTRADAY_MTS_IDBO_TF_ENS_HV_TACTICAL": 388,
+            "INTRADAY_MTS_IDBO_TF_ENS_LV":          389,
+            "INTRADAY_MTS_IDBO_TF_ENS_LV_TACTICAL": 390
+        }
+    },
+
+    "Engine": {
+        "default": {
+            "max_position": 100,
+            "order_count": [
+                { "orders":30, "seconds":60}, 
+                { "orders":60, "seconds":300} 
+            ],
+            "__comment__": "ratios have to be in order or 5, 15 and 60 minutes",
+            "participation_ratio": [
+                {"ratio":1.0,  "std":2.0, "minutes": 5},
+                {"ratio":0.5,  "std":0.5, "minutes": 15},
+                {"ratio":0.25, "std":0.0, "minutes": 60}
+            ],
+            "fat_finger": 100,
+            "max_spread_std_multiple": 5,
+            "max_price_ticks": 20
+        },
+        "WTI": {
+            "max_position": 1000,
+            "order_count": [
+                { "orders":60, "seconds":60}, 
+                { "orders":120, "seconds":300} 
+            ],
+            "participation_ratio": [
+                {"ratio":1.0,  "std":3.0, "minutes": 5},
+                {"ratio":0.5,  "std":1.0, "minutes": 15},
+                {"ratio":0.25, "std":0.0, "minutes": 60}
+            ]
+        }
+    },
+
+    "Strategy": {
+        "TSC-7000-376": {
+            "name": "CAMID2",
+            "paper_trading": 0,
+            "max_strat_pnl_drawdown": 1000000,
+            "markets" : {
+                "default": {
+                    "max_position": 20,
+                    "max_mkt_pnl_drawdown": 500000,
+                    "order_count": [
+                        {"orders":20, "seconds": 60}, 
+                        {"orders":40, "seconds": 300}
+                    ],
+                    "trade_rate": [
+                        {"max_pos_turnover": 2.0, "minutes": 15},
+                        {"max_pos_turnover": 4.0, "minutes": 60}
+                    ],
+                    "flip_count": [
+                        {"flips": 2, "hours": 23}
+                    ]
+                },
+                "NG": {
+                    "max_position": 10,
+                    "max_mkt_pnl_drawdown": 200000
+                }
+            }
+        },
+
+        "TSC-7000-380": {
+            "name": "IDBO_TF_ENS",
+            "paper_trading": 0,
+            "max_strat_pnl_drawdown": 5000000,
+            "markets" : {
+                "default": {
+                    "max_position": 200,
+                    "max_mkt_pnl_drawdown": 5000000,
+                    "order_count": [
+                        {"orders":20, "seconds": 60}, 
+                        {"orders":40, "seconds": 300}
+                    ],
+                    "trade_rate": [
+                        {"max_pos_turnover": 2.0, "minutes": 15},
+                        {"max_pos_turnover": 4.0, "minutes": 60}
+                    ],
+                    "flip_count": [
+                        {"flips": 2, "hours": 23}
+                    ]
+                }
+            }
+        },
+
+        "TSC-7000-391": {
+            "name": "IDBO_TF_ENS_TACTICAL",
+            "paper_trading": 1,
+            "max_strat_pnl_drawdown": 5000000,
+            "markets" : {
+                "default": {
+                    "max_position": 200,
+                    "max_mkt_pnl_drawdown": 5000000,
+                    "order_count": [
+                        {"orders":20, "seconds": 60}, 
+                        {"orders":40, "seconds": 300}
+                    ],
+                    "trade_rate": [
+                        {"max_pos_turnover": 2.0, "minutes": 15},
+                        {"max_pos_turnover": 4.0, "minutes": 60}
+                    ],
+                    "flip_count": [
+                        {"flips": 2, "hours": 23}
+                    ]
+                },
+                "WTI": {
+                    "max_mkt_pnl_drawdown": 2000000
+                }
+            }
+        },
+
+        "TSC-7000-387": {
+            "name": "IDBO_TF_ENS_HV",
+            "paper_trading": 1,
+            "max_strat_pnl_drawdown": 5000000,
+            "markets" : {
+                "default": {
+                    "max_position": 200,
+                    "max_mkt_pnl_drawdown": 5000000,
+                    "order_count": [
+                        {"orders":20, "seconds": 60}, 
+                        {"orders":40, "seconds": 300}
+                    ],
+                    "trade_rate": [
+                        {"max_pos_turnover": 2.0, "minutes": 15},
+                        {"max_pos_turnover": 4.0, "minutes": 60}
+                    ],
+                    "flip_count": [
+                        {"flips": 2, "hours": 23}
+                    ]
+                },
+                "WTI": {
+                    "max_mkt_pnl_drawdown": 2000000
+                }
+            }
+        },
+
+        "TSC-7000-388": {
+            "name": "IDBO_TF_ENS_HV_TACTICAL",
+            "paper_trading": 1,
+            "max_strat_pnl_drawdown": 5000000,
+            "markets" : {
+                "default": {
+                    "max_position": 200,
+                    "max_mkt_pnl_drawdown": 5000000,
+                    "order_count": [
+                        {"orders":20, "seconds": 60}, 
+                        {"orders":40, "seconds": 300}
+                    ],
+                    "trade_rate": [
+                        {"max_pos_turnover": 2.0, "minutes": 15},
+                        {"max_pos_turnover": 4.0, "minutes": 60}
+                    ],
+                    "flip_count": [
+                        {"flips": 2, "hours": 23}
+                    ]
+                },
+                "WTI": {
+                    "max_mkt_pnl_drawdown": 2000000
+                }
+            }
+        },
+
+        "TSC-7000-389": {
+            "name": "IDBO_TF_ENS_LV",
+            "paper_trading": 1,
+            "max_strat_pnl_drawdown": 5000000,
+            "markets" : {
+                "default": {
+                    "max_position": 100,
+                    "max_mkt_pnl_drawdown": 5000000,
+                    "order_count": [
+                        {"orders":20, "seconds": 60}, 
+                        {"orders":40, "seconds": 300}
+                    ],
+                    "trade_rate": [
+                        {"max_pos_turnover": 2.0, "minutes": 15},
+                        {"max_pos_turnover": 4.0, "minutes": 60}
+                    ],
+                    "flip_count": [
+                        {"flips": 2, "hours": 23}
+                    ]
+                },
+                "WTI": {
+                    "max_mkt_pnl_drawdown": 2000000
+                }
+            }
+        },
+
+        "TSC-7000-390": {
+            "name": "IDBO_TF_ENS_LV_TACTICAL",
+            "paper_trading": 1,
+            "max_strat_pnl_drawdown": 5000000,
+            "markets" : {
+                "default": {
+                    "max_position": 100,
+                    "max_mkt_pnl_drawdown": 5000000,
+                    "order_count": [
+                        {"orders":20, "seconds": 60}, 
+                        {"orders":40, "seconds": 300}
+                    ],
+                    "trade_rate": [
+                        {"max_pos_turnover": 2.0, "minutes": 15},
+                        {"max_pos_turnover": 4.0, "minutes": 60}
+                    ],
+                    "flip_count": [
+                        {"flips": 2, "hours": 23}
+                    ]
+                },
+                "WTI": {
+                    "max_mkt_pnl_drawdown": 2000000
+                }
+            }
+        },
+
+        "TSC-7000-370": {
+            "name": "AR1",
+            "paper_trading": 1,
+            "max_strat_pnl_drawdown": 5000000,
+            "markets" : {
+                "default": {
+                    "max_position": 0,
+                    "max_mkt_pnl_drawdown": 5000000,
+                    "order_count": [
+                        {"orders":20, "seconds": 60}, 
+                        {"orders":40, "seconds": 300}
+                    ],
+                    "trade_rate": [
+                        {"max_pos_turnover": 2.0, "minutes": 15},
+                        {"max_pos_turnover": 4.0, "minutes": 60}
+                    ],
+                    "flip_count": [
+                        {"flips": 4, "hours": 23}
+                    ]
+                },
+                "WTI": {
+                    "max_position": 100,
+                    "max_mkt_pnl_drawdown": 2000000
+                }
+            }
+        }
+    }
+}

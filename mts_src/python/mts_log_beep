@@ -1,0 +1,50 @@
+#!/usr/bin/python3
+import os
+import sys
+import mts_util
+import time
+import datetime
+
+PYTHON_PATH = 'python'
+LOGPATH = '/home/mts/run/log'
+
+def beep_error(line):
+    os.system('beep() { read a || exit; printf "$a\007\n"; beep; } ; echo \"' + line + '\" | beep')
+
+def check_error(fd) :
+    lines = fd.readlines()
+    for l in lines:
+        ds = l.split('-')[0]
+        if ds[:3] != '202':
+            continue
+        if 'ERR' in l.upper():
+            beep_error(l)
+
+def run_loop():
+    while True:
+        try :
+            tdu = mts_util.TradingDayUtil()
+            trade_day = tdu.get_trading_day()
+            log_file = 'log_'+trade_day+'.txt'
+            with open(os.path.join(LOGPATH, log_file),'rt') as fp:
+                fp.seek(0,2)  # seek to the end
+                while True:
+                    check_error(fp)
+                    trade_day_now = tdu.get_trading_day()
+                    if trade_day_now != trade_day:
+                        break
+                    time.sleep(1)
+        except KeyboardInterrupt as e:
+            print('stopped')
+            break
+        except Exception as e:
+            dtnow = datetime.datetime.now()
+            if dtnow.hour==17:
+                time.sleep(1)
+                continue
+            break
+
+if __name__ == "__main__":
+    sys.path.append(PYTHON_PATH)
+    run_loop()
+    sys.exit()

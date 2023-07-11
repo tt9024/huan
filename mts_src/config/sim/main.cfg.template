@@ -1,0 +1,37 @@
+#####################
+# This is generated from templte
+# DO NOT EDIT!
+#####################
+
+# This configuration represents a daily
+# simulation run, using the given MtsBar
+# running the strategies defined in Strat.
+
+# Logger
+Logger = log/log
+
+# Recovery
+RecoveryPath = recovery
+ERPersistFile = recovery/er.csv
+
+# Market Data
+BarPath =  ./bar
+HistPath = ./bar_hist
+SymbolMap = config/symbol_map.cfg
+VenueMap = config/venue_map.cfg
+
+# Strategy
+Strat = config/strat.cfg
+
+# Risk
+#Risk = config/risk.cfg
+
+# Strategy Simulation
+SimName = sim1
+SimTraceFile = recovery/pos_trace.csv
+SimDay = 20210217
+# in the format of [ [ contract, bar_file ] , ... ]
+MtsBar = [ ]
+
+# in seconds, i.e. [ 300, 5, 1 ]
+BarSec = [ ]

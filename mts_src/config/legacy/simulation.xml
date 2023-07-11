@@ -1,0 +1,9 @@
+<simulation>
+
+  <params>
+    <notionalcapitalusd>100000</notionalcapitalusd>
+    <ticketcostusd>1</ticketcostusd>
+  </params>
+
+</simulation>
+

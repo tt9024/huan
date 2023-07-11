@@ -1,0 +1,55 @@
+﻿<algorithm>
+
+  <description>TEST</description>
+
+  <algoid>9</algoid>
+  <class>Mts::Algorithm::CAlgorithmTemplate</class>
+  <name>TEST</name>
+  <buffersize>512000</buffersize>
+  <throttlemsec>0</throttlemsec>
+
+  <symbol>
+    <symbol>CAD_N1</symbol>
+  </symbol>
+
+  <params>
+    <execalgoid>0</execalgoid>
+	
+    <tradingschedule>
+    </tradingschedule>
+	
+  </params>
+
+  <limits>
+    <maxpositionsize>
+      <CAD_N1>100</CAD_N1>
+    </maxpositionsize>
+
+    <maxordersize>
+      <CAD_N1>100</CAD_N1>
+    </maxordersize>
+
+    <tradeintervalinsec>0</tradeintervalinsec>
+  </limits>
+  
+  <portfolio>
+    <model>
+      <name>test_models</name>
+      <modeltag>CModelPython</modeltag>
+      <configtag>m_test</configtag>
+    </model>
+  </portfolio>
+
+  <m_test>
+    <module>test_models</module>
+    <function>tm</function>
+    <barsizemin>5</barsizemin>
+    <formationperiod>1</formationperiod>
+
+    <instruments>
+      <instrument>CAD_N1</instrument>
+    </instruments>
+  </m_test>
+
+</algorithm>
+

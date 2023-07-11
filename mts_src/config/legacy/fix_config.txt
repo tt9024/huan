@@ -1,0 +1,45 @@
+# default settings for sessions
+[DEFAULT]
+ConnectionType=initiator
+ReconnectInterval=60
+SendRedundantResendRequests=Y
+FileStorePath=/home/mts/run/log/fix
+FileLogPath=/home/mts/run/log/fix
+FileLogBackupPath=/home/mts/run/log/fix
+
+# TT UAT
+[SESSION]
+BeginString=FIX.4.4
+SenderCompID=massar_fix_data
+TargetCompID=TT_DATA
+UseLocalTime=Y
+StartTime=17:45:00
+EndTime=17:15:00
+HeartBtInt=10
+ReconnectInterval=5
+SocketConnectHost=127.0.0.1
+SocketConnectPort=11503
+UseDataDictionary=Y
+DataDictionary=/home/mts/run/config/legacy/TT-FIX44.xml
+ValidateFieldsOutOfOrder=N
+ValidateUnorderedGroupFields=N
+PersistMessages=N
+
+# TT UAT
+[SESSION]
+BeginString=FIX.4.4
+SenderCompID=massar_fix_trading
+TargetCompID=TT_ORDER
+UseLocalTime=Y
+StartTime=17:45:00
+EndTime=17:15:00
+HeartBtInt=30
+ReconnectInterval=5
+SocketConnectHost=127.0.0.1
+SocketConnectPort=11502
+UseDataDictionary=Y
+DataDictionary=/home/mts/run/config/legacy/TT-FIX44.xml
+ValidateFieldsOutOfOrder=N
+ValidateUnorderedGroupFields=N
+PersistMessages=Y
+AllowUnknownMsgFields=Y

@@ -1,0 +1,14 @@
+#!/usr/bin/python3
+import mts_util
+import sys
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3 :
+        print("Usage: %s sday_yyyymmdd eday_yyyymmdd"%(sys.argv[0]))
+        sys.exit(1)
+    sd = sys.argv[1]
+    ed = sys.argv[2]
+    mts_util.print_pnl(sd, ed, '/home/mts/run/recovery/eod_pos.csv')
+
+
+

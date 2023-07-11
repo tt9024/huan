@@ -1,0 +1,61 @@
+#!/usr/bin/python3
+
+import time
+import os
+import traceback
+import sys
+import signal
+import idbo_ens
+import dill
+import glob
+import mts_util
+import numpy as np
+import datetime
+import time
+import idbo_model
+
+global_obj_ref = None
+def idbo_shutdown(signum, frame):
+    print('python MODEL received signal, calling shutdown')
+    try :
+        global_obj_ref.should_run=False
+    except :
+        traceback.print_exc()
+
+signal.signal(signal.SIGINT, idbo_shutdown)
+signal.signal(signal.SIGTERM, idbo_shutdown)
+
+model_name = 'INTRADAY_MTS_IDBO_TF_ENS_LV_TACTICAL'
+backtest_path = '/home/mts/upload/ZFU_STRATS'
+persist_path = '/home/mts/run/recovery/strat'
+persist_fn = 'idbo_ens_obj.dill'
+tactical_wt_fn = 'weight.csv'
+strat_codes = ['TSC-7000-390']
+
+if __name__ == "__main__":
+    start_hour = 20
+    end_hour = 17
+    # run one day
+    try :
+        # wait for 8pm
+        while True:
+            dt = datetime.datetime.now()
+            if (dt.weekday() == 4 and dt.hour>= end_hour) \
+               or (dt.hour >= end_hour and dt.hour < start_hour):
+                time.sleep(1)
+            else:
+                break
+        tdu = mts_util.TradingDayUtil()
+        trd_day = tdu.get_trading_day(snap_forward=True)
+        print('kicking off at %s for trading day %s'%(str(dt), trd_day))
+        obj_live = idbo_model.load_sod(trd_day, model_name, backtest_path, persist_path, persist_fn, strat_codes)
+        global_obj_ref = obj_live
+        #obj_live.set_tactical(tactical_wt_fn)
+        obj_live.run_live()
+    except KeyboardInterrupt as e:
+        print('user interruption')
+    except Exception as e:
+        traceback.print_exc()
+
+    obj_live.should_run=False
+    time.sleep(3)

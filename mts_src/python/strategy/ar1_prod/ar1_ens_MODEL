@@ -1,0 +1,42 @@
+#!/usr/bin/python3
+import ar1_ens_model as aem
+import datetime
+
+import time
+import os
+import traceback
+import sys
+import signal
+import idbo_ens
+import dill
+import glob
+import mts_util
+import numpy as np
+import datetime
+import time
+
+global_obj_ref = None
+def ar1_ens_shutdown(signum, frame):
+    dtnow = datetime.datetime.now()
+    print('%s python MODEL received signal %d, calling shutdown'%(dtnow.strftime('%Y%m%d-%H:%M:%S'), int(signum)))
+    try :
+        global_obj_ref.should_run=False
+    except :
+        traceback.print_exc()
+
+signal.signal(signal.SIGINT, ar1_ens_shutdown)
+signal.signal(signal.SIGTERM, ar1_ens_shutdown)
+
+if __name__ == "__main__":
+    while True:
+        dtnow = datetime.datetime.now()
+        weekday = dtnow.weekday()
+        if weekday < 4 or (weekday == 4 and dtnow.hour < 17) or (weekday==6 and dtnow.hour>= 17):
+            break
+        time.sleep(5)
+    dtnow = datetime.datetime.now()
+    print('%s ar1_ens_MODEL start!'%(dtnow.strftime('%Y%m%d-%H:%M:%S')))
+    global_obj_ref = aem.AR1_WTI_Ens(aem.MKT, aem.Default_Logger_File, aem.Default_ENS_Config, aem.Default_REF_Config)
+    global_obj_ref.start()
+    dtnow = datetime.datetime.now()
+    print('%s ar1_ens_MODEL done!'%(dtnow.strftime('%Y%m%d-%H:%M:%S')))

@@ -1,0 +1,27 @@
+# default settings for sessions
+[DEFAULT]
+ConnectionType=initiator
+ReconnectInterval=60
+SendRedundantResendRequests=Y
+FileStorePath=/home/mts/run/log/fix
+FileLogPath=/home/mts/run/log/fix
+FileLogBackupPath=/home/mts/run/log/fix
+
+# TT UAT
+[SESSION]
+BeginString=FIX.4.4
+SenderCompID=MASSAR_TEST
+TargetCompID=TT_Dropcopy
+HeartBtInt=30
+UseLocalTime=Y
+StartTime=02:15:00
+EndTime=02:00:00
+ReconnectInterval=5
+SocketConnectHost=127.0.0.1
+SocketConnectPort=11505
+UseDataDictionary=Y
+DataDictionary=/home/mts/run/config/legacy/TT-FIX44.xml
+ValidateFieldsOutOfOrder=N
+ValidateUnorderedGroupFields=N
+PersistMessages=Y
+

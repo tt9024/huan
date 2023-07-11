@@ -1,0 +1,66 @@
+# Logger
+Logger = log/log
+
+# Recovery
+RecoveryPath = recovery
+ERPersistFile = recovery/er.csv
+
+# Market Data
+BarPath =  ./bar
+HistPath = ./bar_hist
+BarSec = [ 300, 5, 1 ]
+SymbolMap = config/symbol_map.cfg
+VenueMap = config/venue_map.cfg
+
+# Symbol Map
+XmlPath = config/symbol
+AssetsXml = assets.xml
+
+# Market Data Providers
+MDProviders = {
+                  BPipe = config/bpipe.cfg
+                  TTFix = Config = config/legacy/feed_TT.xml
+              }
+
+# Subscription
+# For all tradable from symbol map, if it fall in 
+# either one of the lists, it is subscribed.
+# Currently subscribes all but EOP and EUR. 
+# EOP and EUR symbols are not available from TT.
+
+# N bounded by MaxN
+MaxN = 2
+MTSVenue = {
+               # venue: [primary, backup]
+               #CBF=  [TTFix , BPipe]
+               CBT=  [ BPipe]
+               CEC=  [ BPipe]
+               CME=  [ BPipe]
+               #IFCA= [TTFix , BPipe]
+               IFEU= [ BPipe]
+               IFLL= [ BPipe]
+               #IFLX= [TTFix , BPipe]
+               IFUS= [ BPipe]
+               #MGE=  [TTFix , BPipe]
+               NYM=  [ BPipe]
+               #EOP=  [TTFix , BPipe]
+               #EUR=  [TTFix , BPipe]
+           }
+# this setting mainly for testing purpose
+# when set up, be careful not to have
+# cause multiple primary among providers
+MTSSymbol = {
+              #WTI=   [ BPipe  ]
+            }
+        
+# Strategy
+Strat = config/strat.cfg
+
+# Risk
+Risk = config/risk.cfg
+
+# PositionServer Interface
+EnablePositionServer=true
+PositionServerHost=10.60.1.141
+PositionServerPort=50051
+PositionServerAuthToken=7270b2cb16698feb4736729629f2b96566e296c27f73bccc971e1093b2e39ea3

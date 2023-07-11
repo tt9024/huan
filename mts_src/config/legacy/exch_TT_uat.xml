@@ -1,0 +1,19 @@
+<exchange>
+
+  <provider>TT</provider>
+  <class>Mts::Exchange::CExchangeFIX_TT</class>
+  <name>TT</name>
+
+  <fix>
+    <SenderCompID>massar_fix_trading</SenderCompID>
+    <TargetCompID>TT_ORDER</TargetCompID>
+    <heartbeat>30</heartbeat>
+    <username>NDill</username>
+    <password>MassarCapital!@#</password>
+    <account>Massar</account>
+    <tag50>NDill</tag50>
+    <tag116>NDill</tag116>
+    <tag25004>NDill</tag25004>
+  </fix>
+
+</exchange>

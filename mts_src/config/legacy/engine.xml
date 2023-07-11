@@ -1,0 +1,81 @@
+<engine>
+
+  <general>
+    <engineid>2</engineid>
+    <name>Sim Engine</name>
+    <production>0</production>
+    <fixconfig>fix_config.txt</fixconfig>
+    <risklimits>risk_limits.xml</risklimits>
+    <tcpserverbuffer>2048000</tcpserverbuffer>
+    <tcpserverport>60000</tcpserverport>
+    <engctrlport>60002</engctrlport>
+    <usedatetimeevents>0</usedatetimeevents>
+    <eventloopsleepms>3000</eventloopsleepms>
+    <guihbmins>0</guihbmins>
+    <guiupdatethrottlemsec>0</guiupdatethrottlemsec>
+    <mktdatamgrbuffer>1024000</mktdatamgrbuffer>
+    <mktdatamgrupdatemsec>1000</mktdatamgrupdatemsec>
+    <mktdatamgrusesql>1</mktdatamgrusesql>
+  </general>
+
+  <simulation>
+    <simulatorxml>simulation.xml</simulatorxml>
+    <simulationmode>0</simulationmode>
+    <simulationmodefullreporting>1</simulationmodefullreporting>
+    <simulationmodeinitalgos>0</simulationmodeinitalgos>
+  </simulation>
+  
+  <staticdata>
+    <ccydef>currency.xml</ccydef>
+    <symboldef>symbols.xml</symboldef>
+    <providerdef>provider.xml</providerdef>
+  </staticdata>
+
+  <identifiers>
+    <generateorderid>0</generateorderid>
+    <nextorderid>700000</nextorderid>
+  </identifiers>
+
+  <reporting>
+    <loadpositionsonstart>1</loadpositionsonstart>
+    <loadpositionsfromsql>1</loadpositionsfromsql>
+    <loadorderhistory>1</loadorderhistory>
+    <recoverydir>recovery</recoverydir>
+  </reporting>
+
+  <sql>
+    <usesql>0</usesql>
+    <server>localhost</server>
+    <database>mtsdb</database>
+  </sql>
+
+  <email>
+    <enableemailer>0</enableemailer>
+    <smtpserver>smtp.office.com</smtpserver>
+    <fromemailaddr>nick.dill@massarcapital.com</fromemailaddr>
+    <toemailaddr>nick.dill@massarcapital.com</toemailaddr>
+    <toemailaddr_riskmon>nick.dill@massarcapital.com</toemailaddr_riskmon>
+  </email>
+
+  <logging>
+    <directory>log</directory>
+    <marketdataquotelog>quotes</marketdataquotelog>
+    <marketdatatradelog>trades</marketdatatradelog>
+    <buffersize>4096000</buffersize>
+    <intervalsecs>2</intervalsecs>
+    <nologging>0</nologging>
+  </logging>
+
+  <feeds>
+    <feed>feed_TT.xml</feed>
+  </feeds>
+
+  <exchanges>
+    <exchange>exch_TT.xml</exchange>
+  </exchanges>
+
+  <algorithms>
+    <algo>algo_Test.xml</algo>
+  </algorithms>
+</engine>
+
